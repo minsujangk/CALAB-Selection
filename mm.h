@@ -9,7 +9,6 @@
 #ifndef CALAB_SELECTION_MM_H
 #define CALAB_SELECTION_MM_H
 
-#include <sys/mman.h>
 #include "prm_loader.h"
 #include "list.h"
 
@@ -20,6 +19,7 @@ struct mm_prm_info
 
 struct mm_prm_mapping
 {
+    struct list_elem elem;
     void *addr;
     unsigned int length;
 
@@ -27,7 +27,8 @@ struct mm_prm_mapping
     unsigned int efile_off_end;
 };
 
-int init_exec(struct exec_prm *);
-int load_exec(struct exec_prm *, unsigned int offset);
+int mm_init_exec(struct exec_prm *);
+int mm_load_exec(struct exec_prm *, unsigned int);
+void* _mm_mmap(struct exec_prm *eprm, unsigned int offset, unsigned int length);
 
 #endif //CALAB_SELECTION_MM_H

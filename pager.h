@@ -5,4 +5,6 @@
 #ifndef CALAB_SELECTION_PAGER_H
 #define CALAB_SELECTION_PAGER_H
 
+void sig_segv_handler(int signo);
+
 #endif //CALAB_SELECTION_PAGER_H
