@@ -21,14 +21,14 @@ struct mm_prm_mapping
 {
     struct list_elem elem;
     void *addr;
-    unsigned int length;
+    size_t length;
 
-    unsigned int efile_off_start;
-    unsigned int efile_off_end;
+    size_t efile_off_start;
+    size_t efile_off_end;
 };
 
 int mm_init_exec(struct exec_prm *);
-int mm_load_exec(struct exec_prm *, unsigned int);
-void* _mm_mmap(struct exec_prm *eprm, unsigned int offset, unsigned int length);
+int mm_load_exec(struct exec_prm *, size_t);
+void* _mm_mmap(struct exec_prm *eprm, size_t offset, size_t length);
 
 #endif //CALAB_SELECTION_MM_H

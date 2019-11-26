@@ -8,7 +8,7 @@
  * mmap file with given offset, length
  * push into mapping info
  */
-void* _mm_mmap(struct exec_prm *eprm, unsigned int offset, unsigned int length)
+void *_mm_mmap(struct exec_prm *eprm, size_t offset, size_t length)
 {
     struct mm_prm_mapping *mpmapping =
         malloc(sizeof(struct mm_prm_mapping));

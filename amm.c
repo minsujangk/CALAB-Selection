@@ -28,7 +28,7 @@ int mm_handle_segfault(struct exec_prm *prm, char *address)
     return -1;
 }
 
-int mm_load_exec(struct exec_prm *eprm, unsigned int offset)
+int mm_load_exec(struct exec_prm *eprm, size_t offset)
 {
     return -1; // not necessary for amm
 }

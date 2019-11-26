@@ -16,14 +16,14 @@ struct exec_prm
 
     int fd;
     const char *filename;
-    unsigned int file_length;
+    size_t file_length;
 
     int argc;
 
     struct mm_prm_info *mpinfo;
 
-    void* mmap_addr;
-    unsigned int off_max_loaded; // maximum loaded executable size
+    void *mmap_addr;
+    size_t off_max_loaded; // maximum loaded executable size
 };
 
 int execv(const char *, char *[]);
