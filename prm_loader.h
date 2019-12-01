@@ -19,6 +19,7 @@ struct exec_prm
     size_t file_length;
 
     int argc;
+    void* entry_point;
 
     struct mm_prm_info *mpinfo;
 
@@ -26,6 +27,6 @@ struct exec_prm
     size_t off_max_loaded; // maximum loaded executable size
 };
 
-int execv(const char *, char *[]);
+int cexecv(const char *, char *[]);
 
 #endif //CALAB_SELECTION_PLOADER_H

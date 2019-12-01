@@ -16,11 +16,11 @@ int main(int argc, char *argv[])
     int is_exec;
     if (argc == 2)
     {
-        is_exec = execv(argv[0], NULL);
+        is_exec = cexecv(argv[0], NULL);
     }
     else
     {
-        is_exec = execv(argv[0], &argv[1]);
+        is_exec = cexecv(argv[0], &argv[1]);
     }
 
     if (is_exec < 0)

@@ -29,6 +29,6 @@ struct mm_prm_mapping
 
 int mm_init_exec(struct exec_prm *);
 int mm_load_exec(struct exec_prm *, size_t);
-void* _mm_mmap(struct exec_prm *eprm, size_t offset, size_t length);
+void *_mm_mmap(struct exec_prm *eprm, void *vaddr, size_t offset, size_t length);
 
 #endif //CALAB_SELECTION_MM_H

@@ -8,15 +8,15 @@
 
 int mm_init_exec(struct exec_prm *eprm)
 {
-    // initialize executable
-    // if amm, load all-at-once
+    // // initialize executable
+    // // if amm, load all-at-once
 
-    void *mmap_addr = _mm_mmap(eprm, 0, eprm->file_length);
-    printf("mmap_addr is : %p\n", mmap_addr);
-    if (mmap_addr < 0)
-        return -1;
+    // void *mmap_addr = _mm_mmap(eprm, 0, eprm->file_length);
+    // printf("mmap_addr is : %p\n", mmap_addr);
+    // if (mmap_addr < 0)
+    //     return -1;
 
-    eprm->mmap_addr = mmap_addr;
+    // eprm->mmap_addr = mmap_addr;
     return 0;
 }
 

@@ -8,18 +8,19 @@
  * mmap file with given offset, length
  * push into mapping info
  */
-void *_mm_mmap(struct exec_prm *eprm, size_t offset, size_t length)
+void *_mm_mmap(struct exec_prm *eprm, void *vaddr, size_t offset, size_t length)
 {
     struct mm_prm_mapping *mpmapping =
         malloc(sizeof(struct mm_prm_mapping));
 
     void *mmap_addr = NULL;
-    if (eprm->mmap_addr)
-        mmap_addr = eprm->mmap_addr + offset;
+    // if (eprm->mmap_addr)
+    //     mmap_addr = eprm->mmap_addr + offset;
 
-    mmap_addr = mmap(mmap_addr, length,
-                     PROT_READ | PROT_EXEC, MAP_PRIVATE,
+    mmap_addr = mmap(vaddr, length,
+                     PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE,
                      eprm->fd, offset);
+    //temporarily allow every prot
 
     mpmapping->addr = mmap_addr;
     mpmapping->efile_off_start = offset;
@@ -27,6 +28,8 @@ void *_mm_mmap(struct exec_prm *eprm, size_t offset, size_t length)
     mpmapping->length = length;
 
     list_push_back(&eprm->mpinfo->map_list, &mpmapping->elem);
+
+    printf("%d-%d mapped from %p-%p\n", offset, offset + length, mmap_addr, mmap_addr + length);
 
     return mmap_addr;
 }

@@ -32,3 +32,6 @@
 *.app
 .idea/
 .vscode/
+apager
+dpager
+echo
