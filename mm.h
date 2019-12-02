@@ -13,6 +13,9 @@
 #include "binfmts.h"
 #include "list.h"
 
+#define PAGE_SIZE 4096
+#define PAGE_ALIGN(addr) (addr & ~((unsigned long)(PAGE_SIZE - 1)))
+
 #define AT_VECTOR_SIZE 2
 
 struct usrld_mm_struct

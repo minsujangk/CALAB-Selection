@@ -5,6 +5,9 @@
 #ifndef CALAB_SELECTION_PAGER_H
 #define CALAB_SELECTION_PAGER_H
 
-int execv(const char *, const char *[]);
+#include "binfmts.h"
+
+static int execve(const char *, const char *[], const char*[]);
+int bprm_mm_init(struct usrld_binprm *bprm);
 
 #endif //CALAB_SELECTION_PAGER_H
