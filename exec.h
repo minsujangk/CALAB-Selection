@@ -5,4 +5,6 @@
 #ifndef CALAB_SELECTION_PAGER_H
 #define CALAB_SELECTION_PAGER_H
 
+int execv(const char *, const char *[]);
+
 #endif //CALAB_SELECTION_PAGER_H

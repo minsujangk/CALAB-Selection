@@ -10,24 +10,37 @@
 #define CALAB_SELECTION_MM_H
 
 #include <sys/mman.h>
-#include "prm_loader.h"
+#include "binfmts.h"
 #include "list.h"
 
-struct mm_prm_info
+#define AT_VECTOR_SIZE 2
+
+struct usrld_mm_struct
 {
-    struct list map_list; // list of struct mm_prm_mapping
+    struct usrld_vma_struct *mmap;
+
+    unsigned long mmap_base;        /* base of mmap area */
+    unsigned long mmap_legacy_base; /* base of mmap area in bottom-up allocations */
+
+    // spinlock_t arg_lock; /* protect the below fields */
+    unsigned long start_code, end_code, start_data, end_data;
+    unsigned long start_brk, brk, start_stack;
+    unsigned long arg_start, arg_end, env_start, env_end;
+
+    unsigned long saved_auxv[AT_VECTOR_SIZE]; /* for /proc/PID/auxv */
 };
 
-struct mm_prm_mapping
+struct usrld_vma_struct
 {
-    void *addr;
-    unsigned int length;
+    unsigned long vm_start;
+    unsigned long vm_end;
 
-    unsigned int efile_off_start;
-    unsigned int efile_off_end;
+    struct usrld_vma_struct *vm_next, *vm_prev;
+
+    struct usrld_mm_struct *vm_mm;
 };
 
-int init_exec(struct exec_prm *);
-int load_exec(struct exec_prm *, unsigned int offset);
+int init_exec(struct usrld_binprm *);
+int load_exec(struct usrld_binprm *, unsigned int offset);
 
 #endif //CALAB_SELECTION_MM_H
