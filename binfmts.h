@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "mm.h"
 
+#define _STK_LIM (8 * 1024 * 1024)
 #define USRLD_BINPRM_BUF_SIZE 128
 #define PAGE_SHIFT 12
 
@@ -18,8 +19,9 @@ struct usrld_binprm
 
     struct usrld_mm_struct *mm;
     unsigned long p;
+    unsigned long argmin;
 
-    FILE* fp; // file 대체
+    FILE *fp; // file 대체
 
     int argc, envc;
     const char *filename;

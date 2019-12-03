@@ -9,24 +9,17 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
+#include <string.h>
 
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top);
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[], char *envp[])
 {
     srand(time(NULL));
 
     // signal(SIGSEGV, (void *)sig_segv_handler);
 
-    int is_exec;
-    if (argc == 2)
-    {
-        is_exec = execve(argv[0], NULL, NULL);
-    }
-    else
-    {
-        is_exec = execve(argv[0], &argv[1], NULL);
-    }
+    int is_exec = execve(argv[0], &argv[1], envp);
 
     if (is_exec < 0)
         exit(-1);
@@ -55,6 +48,16 @@ int execve(const char *filename, const char *argv[], const char *envp[])
     bprm->interp = filename;
 
     retval = bprm_mm_init(bprm);
+    if (retval < 0)
+        goto out_free;
+
+    retval = prepare_arg_pages(bprm, argv, envp);
+    if (retval < 0)
+        goto out_free;
+
+    retval = prepare_binprm(bprm);
+    if (retval < 0)
+        goto out_free;
 
 out_free:
     free(bprm);
@@ -103,4 +106,44 @@ static unsigned long usrld_randomize_stack_top(unsigned long stack_top)
     random_variable <<= PAGE_SHIFT;
 
     return PAGE_ALIGN(stack_top) - random_variable;
+}
+
+int prepare_arg_pages(struct usrld_binprm *bprm, const char *argv[], const char *envp[])
+{
+    int i, count = 0;
+    for (i = 0; i < 0x7FFFFFFF; i++)
+    {
+        if (!argv[i])
+            break;
+        ++count;
+    }
+    bprm->argc = count;
+
+    count = 0;
+    for (i = 0; i < 0x7FFFFFFF; i++)
+    {
+        if (!envp[i])
+            break;
+        ++count;
+    }
+    bprm->envc = count;
+
+    int limit, ptr_size;
+    limit = _STK_LIM / 4 * 3;
+    limit = max_t(unsigned long, limit, 32 * PAGE_SIZE);
+
+    ptr_size = (bprm->argc + bprm->envc) * sizeof(void *);
+    if (limit <= ptr_size)
+        return -E2BIG;
+    limit -= ptr_size;
+
+    bprm->argmin = bprm->p - limit;
+    return 0;
+}
+
+int prepare_binprm(struct usrld_binprm *bprm)
+{
+    memset(bprm->buf, 0, USRLD_BINPRM_BUF_SIZE);
+
+    return fread(bprm->buf, USRLD_BINPRM_BUF_SIZE, 1, bprm->fp);
 }
