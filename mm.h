@@ -56,7 +56,4 @@ struct usrld_vma_struct
     struct usrld_mm_struct *vm_mm;
 };
 
-int init_exec(struct usrld_binprm *);
-int load_exec(struct usrld_binprm *, unsigned int offset);
-
 #endif //CALAB_SELECTION_MM_H

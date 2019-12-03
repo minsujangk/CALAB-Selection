@@ -19,7 +19,7 @@ int main(int argc, char *argv[], char *envp[])
 
     // signal(SIGSEGV, (void *)sig_segv_handler);
 
-    int is_exec = execve(argv[0], &argv[1], envp);
+    int is_exec = execve(argv[0], (const char **)&argv[1], (const char **)envp);
 
     if (is_exec < 0)
         exit(-1);
@@ -56,6 +56,24 @@ int execve(const char *filename, const char *argv[], const char *envp[])
         goto out_free;
 
     retval = prepare_binprm(bprm);
+    if (retval < 0)
+        goto out_free;
+
+    // instead of copy_strings_kernelL
+    retval = copy_strings(1, &bprm->filename, bprm);
+    if (retval < 0)
+        goto out_free;
+
+    bprm->exec = bprm->p;
+    retval = copy_strings(bprm->envc, envp, bprm);
+    if (retval < 0)
+        goto out_free;
+
+    retval = copy_strings(bprm->argc, argv, bprm);
+    if (retval < 0)
+        goto out_free;
+
+    retval = exec_binprm(bprm);
     if (retval < 0)
         goto out_free;
 
@@ -146,4 +164,100 @@ int prepare_binprm(struct usrld_binprm *bprm)
     memset(bprm->buf, 0, USRLD_BINPRM_BUF_SIZE);
 
     return fread(bprm->buf, USRLD_BINPRM_BUF_SIZE, 1, bprm->fp);
+}
+
+int search_binary_handler(struct usrld_binprm *bprm)
+{
+    int retval;
+
+    if (bprm->recursion_depth > 5)
+        return -ELOOP;
+
+    retval = -ENOENT;
+
+    // ignore fmt search loop, just go to elf
+    bprm->recursion_depth++;
+    retval = load_binary(bprm);
+    bprm->recursion_depth--;
+
+    if (retval < 0 && !bprm->mm)
+    {
+        //force sigsegv
+        return retval;
+    }
+    if (retval != -ENOEXEC || !bprm->fp)
+    {
+        return retval;
+    }
+
+    return retval;
+}
+
+static int exec_binprm(struct usrld_binprm *bprm)
+{
+    int ret;
+
+    ret = search_binary_handler(bprm);
+
+    return ret;
+}
+
+static int copy_strings(int argc, const char *argv[],
+                        struct usrld_binprm *bprm)
+{
+    int ret;
+
+    while (argc-- > 0)
+    {
+        const char *str;
+        int len;
+        unsigned long pos;
+
+
+        ret = -EFAULT;
+        str = argv[argc];
+        if (!str)
+            goto out;
+
+        len = strlen(str) + 1; // NULL 포함 (원래는 그렇다)
+        if (!len)
+            goto out;
+
+        printf("copying len=%d, %s\n", len, str);
+
+        ret = -E2BIG;
+        if (!(len <= MAX_ARG_STRLEN))
+            goto out;
+
+        pos = bprm->p;
+        // str += len;
+        bprm->p -= len;
+
+        if (bprm->p < bprm->argmin)
+            goto out;
+
+        memcpy((void *)bprm->p, str, len);
+        // page 단위 복사는 불필요해 보임.
+        // while (len > 0)
+        // {
+        //     int offset, bytes_to_copy;
+
+        //     offset = pos % PAGE_SIZE;
+        //     if (offset == 0)
+        //         offset = PAGE_SIZE;
+
+        //     bytes_to_copy = offset;
+        //     if (bytes_to_copy > len)
+        //         bytes_to_copy = len;
+
+        //     offset -= bytes_to_copy;
+        //     pos -= bytes_to_copy;
+        //     str -= bytes_to_copy;
+        //     len -= bytes_to_copy;
+
+        // }
+    }
+    ret = 0;
+out:
+    return ret;
 }

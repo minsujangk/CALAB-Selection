@@ -11,5 +11,7 @@ static int execve(const char *, const char *[], const char *[]);
 int bprm_mm_init(struct usrld_binprm *bprm);
 int prepare_arg_pages(struct usrld_binprm *bprm, const char *argv[], const char *envp[]);
 int prepare_binprm(struct usrld_binprm *bprm);
+static int copy_strings(int argc, const char *argv[], struct usrld_binprm *bprm);
+static int exec_binprm(struct usrld_binprm *bprm);
 
 #endif //CALAB_SELECTION_PAGER_H
