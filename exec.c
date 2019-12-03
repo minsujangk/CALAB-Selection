@@ -99,7 +99,7 @@ int bprm_mm_init(struct usrld_binprm *bprm)
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top)
 {
     int random_variable = rand();
-    random_variable &= 0x7ff;
+    random_variable &= 0x3ff; // 4MB mask not to exceed stack limit (8MB)
     random_variable <<= PAGE_SHIFT;
 
     return PAGE_ALIGN(stack_top) - random_variable;
