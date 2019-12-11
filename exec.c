@@ -18,14 +18,16 @@ int main(int argc, char *argv[], char *envp[])
     srand(time(NULL));
 
     // signal(SIGSEGV, (void *)sig_segv_handler);
-
-    int is_exec = execve(argv[0], (const char **)&argv[1], (const char **)envp);
+    // unsigned long add = getauxval(AT_PAGESZ);
+    // printf("HWCAP: %ld\n", *((long *)add));
+    // mmap(0x400000, 100, PROT_READ| PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
 
     if (is_exec < 0)
         exit(-1);
 }
 
-int execve(const char *filename, const char *argv[], const char *envp[])
+int cexecve(const char *filename, const char *argv[], const char *envp[])
 {
     struct usrld_binprm *bprm;
     FILE *fp;
@@ -108,7 +110,7 @@ int bprm_mm_init(struct usrld_binprm *bprm)
     vma->vm_end = USRLD_STACK_TOP;
     vma->vm_start = vma->vm_end - PAGE_SIZE;
 
-    *(long *)USRLD_STACK_TOP = 0xd3;
+    // *(long *)USRLD_STACK_TOP = 0xd3;
 
     // simulating insert_vm_struct(mm, vma);
     mm->mmap = vma;
@@ -213,7 +215,6 @@ static int copy_strings(int argc, const char *argv[],
         int len;
         unsigned long pos;
 
-
         ret = -EFAULT;
         str = argv[argc];
         if (!str)
@@ -260,4 +261,29 @@ static int copy_strings(int argc, const char *argv[],
     ret = 0;
 out:
     return ret;
+}
+
+int setup_arg_pages(struct usrld_binprm *bprm,
+                    unsigned long stack_top,
+                    int executable_stack)
+{
+    unsigned long ret;
+    unsigned long stack_shift;
+    // struct usrld_mm_struct *mm = bprm->mm;
+    struct usrld_vma_struct *vma = bprm->vma;
+    struct usrld_vma_struct *prev = NULL;
+    unsigned long vm_flags;
+    unsigned long stack_base;
+    unsigned long stack_size;
+    unsigned long stack_expand;
+    unsigned long rlim_stack;
+
+    stack_top = stack_top & ~((unsigned long)0xf); // arch_align_stack
+    stack_top = PAGE_ALIGN(stack_top);
+
+    bprm->mm->arg_start = bprm->p;
+
+    bprm->mm->start_stack = bprm->p;
+
+    // omit stack_shift: bprm_mm_init에서 이미 randomize를 했기 때문
 }

@@ -16,7 +16,7 @@
 #define PAGE_SIZE 4096
 #define PAGE_ALIGN(addr) (addr & ~((unsigned long)(PAGE_SIZE - 1)))
 
-#define AT_VECTOR_SIZE 2
+#define AT_VECTOR_SIZE (2 * (2 + 20 + 1))
 
 // helper functions from page-types.h
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))

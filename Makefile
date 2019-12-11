@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g
+CFLAGS = -std=gnu99 -g 
 
 all: apager dpager
 
