@@ -7,6 +7,8 @@
 
 #include "binfmts.h"
 
+#define IS_DEBUG 0
+
 static int cexecve(const char *, const char *[], const char *[]);
 int bprm_mm_init(struct usrld_binprm *bprm);
 int prepare_arg_pages(struct usrld_binprm *bprm, const char *argv[], const char *envp[]);

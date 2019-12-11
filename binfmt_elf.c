@@ -305,7 +305,8 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
     unsigned long map_addr;
     unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
     unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
-    printf("elf map %p\n", addr);
+    if (IS_DEBUG)
+        ("elf map %p\n", addr);
     addr = ELF_PAGESTART(addr);
     size = ELF_PAGEALIGN(size);
 
@@ -324,7 +325,8 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
         map_addr = mmap((void *)addr, size, prot, type, _fd, off);
     close(_fd);
 
-    printf("mapping %p-%p to %p, %p?, %d\n", off, off + size, map_addr, addr, errno);
+    if (IS_DEBUG)
+        printf("mapping %p-%p to %p, %p?, %d\n", off, off + size, map_addr, addr, errno);
 
     return (map_addr);
 }
@@ -395,12 +397,13 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
     // memcpy(u_rand_bytes, k_rand_bytes, sizeof(k_rand_bytes));
 
     elf_info = (Elf64_Addr *)bprm->mm->saved_auxv;
-#define NEW_AUX_ENT(id, val)           \
-    do                                 \
-    {                                  \
-        elf_info[ei_index++] = id;     \
-        elf_info[ei_index++] = val;    \
-        printf("%s: %ld\n", #id, val); \
+#define NEW_AUX_ENT(id, val)               \
+    do                                     \
+    {                                      \
+        elf_info[ei_index++] = id;         \
+        elf_info[ei_index++] = val;        \
+        if (IS_DEBUG)                      \
+            printf("%s: %ld\n", #id, val); \
     } while (0)
     NEW_AUX_ENT(AT_HWCAP, get_aux_value(AT_HWCAP));
     NEW_AUX_ENT(AT_PAGESZ, get_aux_value(AT_PAGESZ));
@@ -447,7 +450,7 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
         *sp = (Elf64_Addr)p;
         sp++;
 
-        len = strlen((void *)p);
+        len = strlen((void *)p) + 1;
         p += len;
     }
     *sp = 0;
@@ -461,7 +464,7 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
         *sp = (Elf64_Addr)p;
         sp++;
 
-        len = strlen((void *)p);
+        len = strlen((void *)p) + 1;
         p += len;
     }
     *sp = 0;
@@ -517,6 +520,6 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
     // asm("movq %0, %%rbp" ::"r"(pp));
     // asm("movq $0, %rbp");
     // asm("jmp *%0" ::"r"(&jmp_target));
-    asm("jmp *%0":: "r"(jmp_target));
+    asm("jmp *%0" ::"r"(jmp_target));
     // asm("jmp %eax");
 }

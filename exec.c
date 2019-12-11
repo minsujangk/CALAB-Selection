@@ -224,7 +224,8 @@ static int copy_strings(int argc, const char *argv[],
         if (!len)
             goto out;
 
-        printf("copying len=%d, %s\n", len, str);
+        if (IS_DEBUG)
+            printf("copying len=%d, %s\n", len, str);
 
         ret = -E2BIG;
         if (!(len <= MAX_ARG_STRLEN))
