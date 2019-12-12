@@ -22,11 +22,7 @@ int main(int argc, char *argv[], char *envp[])
     act.sa_sigaction = sig_segv_handler;
     act.sa_flags = SA_SIGINFO;
     sigaction(SIGSEGV, &act, NULL);
-    // signal(SIGSEGV, (void *)sig_segv_handler);
 #endif
-    // unsigned long add = getauxval(AT_PAGESZ);
-    // printf("HWCAP: %ld\n", *((long *)add));
-    // mmap(0x400000, 100, PROT_READ| PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
     int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
 
     if (is_exec < 0)
@@ -72,7 +68,7 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
     if (retval < 0)
         goto out_free;
 
-    // instead of copy_strings_kernelL
+    // instead of copy_strings_kernel
     retval = copy_strings(1, &bprm->filename, bprm);
     if (retval < 0)
         goto out_free;
@@ -116,14 +112,10 @@ int bprm_mm_init(struct usrld_binprm *bprm)
     vma->vm_mm = mm;
 
     // read rsp to configure program stack top
-    // TODO: 이 방법으로 program memory area 할당하는 게 맞는지 체크.
-    // otherwise 새 thread 생성하는 방법으로 해야할듯
     register long rsp asm("rsp");
     unsigned long USRLD_STACK_TOP = usrld_randomize_stack_top(rsp);
     vma->vm_end = USRLD_STACK_TOP;
     vma->vm_start = vma->vm_end - PAGE_SIZE;
-
-    // *(long *)USRLD_STACK_TOP = 0xd3;
 
     // simulating insert_vm_struct(mm, vma);
     mm->mmap = vma;
@@ -252,25 +244,6 @@ static int copy_strings(int argc, const char *argv[],
             goto out;
 
         memcpy((void *)bprm->p, str, len);
-        // page 단위 복사는 불필요해 보임.
-        // while (len > 0)
-        // {
-        //     int offset, bytes_to_copy;
-
-        //     offset = pos % PAGE_SIZE;
-        //     if (offset == 0)
-        //         offset = PAGE_SIZE;
-
-        //     bytes_to_copy = offset;
-        //     if (bytes_to_copy > len)
-        //         bytes_to_copy = len;
-
-        //     offset -= bytes_to_copy;
-        //     pos -= bytes_to_copy;
-        //     str -= bytes_to_copy;
-        //     len -= bytes_to_copy;
-
-        // }
     }
     ret = 0;
 out:
@@ -312,7 +285,7 @@ void sig_segv_handler(int signo, siginfo_t *info, void *ucontext)
         printf("Segmentation fault (core not dumped:))\n");
         _exit(-1);
     }
-    if (elf_map_dpage(target_bprm, info->si_addr) < 0)
+    if (elf_map_dpage(target_bprm, (unsigned long)info->si_addr) < 0)
     {
         printf("failed mapping exe @%p\n", info->si_addr);
         _exit(-1);

@@ -127,12 +127,6 @@ int load_binary(struct usrld_binprm *bprm)
         elf_flags = MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE;
 
         vaddr = elf_ppnt->p_vaddr;
-        // if (vaddr > 0)
-        // {
-        //     vaddr += 0x40000000;
-        // }
-        // if ((elf_ppnt->p_flags & PF_X))
-        //     vaddr = 0xc00000; // map .text in different region.
         if (elf_ex->e_type == ET_EXEC || load_addr_set)
         {
             elf_flags |= elf_fixed;
@@ -142,9 +136,6 @@ int load_binary(struct usrld_binprm *bprm)
             //later
         }
 
-        // printf("size is %p\n", elf_ppnt->p_filesz + elf_ppnt->p_offset);
-        // _mm_mmap(eprm, vaddr - elf_ppnt->p_offset,
-        //          0, elf_ppnt->p_filesz + elf_ppnt->p_offset);
 #ifndef DPAGER
         error = elf_map(bprm->fp, load_bias + vaddr, elf_ppnt,
                         elf_prot, elf_flags, total_size, bprm->filename);
@@ -159,7 +150,7 @@ int load_binary(struct usrld_binprm *bprm)
         list_push_back(&bprm->dpage_list, &dpage->elem);
         error = elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off, 0, elf_prot, elf_flags, bprm->filename);
         if (IS_DEBUG)
-            printf("dpage added %p-%p\n", dpage->base_vaddr, dpage->base_vaddr + dpage->max_size);
+            printf("dpage added %p-%p\n", (void *)dpage->base_vaddr, (void *)(dpage->base_vaddr + dpage->max_size));
 
 #endif
 
@@ -176,7 +167,6 @@ int load_binary(struct usrld_binprm *bprm)
         }
 
         k = elf_ppnt->p_vaddr;
-        // start_code = 0xc00000; // fix start_code to 0xc00000;
         if (k < start_code)
             start_code = k;
         if (start_data < k)
@@ -222,7 +212,6 @@ int load_binary(struct usrld_binprm *bprm)
         memset((void *)elf_bss, 0, nbyte);
     }
     elf_entry = elf_ex->e_entry;
-    // bprm->entry = elf_ex->e_entry;
 
     free(elf_phdata);
 
@@ -252,7 +241,7 @@ out_err:
 elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
                          FILE *elf_fp)
 {
-    struct elf_phdr *elf_phdata = NULL;
+    elf_phdr *elf_phdata = NULL;
     int retval, err = -1;
     unsigned long pos = elf_ex->e_phoff;
     unsigned int size;
@@ -289,12 +278,7 @@ out:
 static int set_brk(unsigned long start, unsigned long end, int prot,
                    struct usrld_mm_struct *mm)
 {
-    // #ifndef DPAGER
     start = ELF_PAGEALIGN(start);
-    // #endif
-    // #ifdef DPAGER
-    //     start = ELF_PAGESTART(start);
-    // #endif
     end = ELF_PAGEALIGN(end);
     if (end > start)
     {
@@ -302,18 +286,18 @@ static int set_brk(unsigned long start, unsigned long end, int prot,
         unsigned long request = end - start;
 
         unsigned long len = PAGE_ALIGN(request);
-        int ret;
+        void *ret;
 
         if (len < request)
             return -ENOMEM;
         if (!len)
             return 0;
         if (IS_DEBUG)
-            printf("brkb %p-%p\n", addr, addr + len);
+            printf("brkb %p-%p\n", (void *)addr, (void *)(addr + len));
         ret = mmap((void *)addr, len, prot,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
         if (ret < 0)
-            return ret;
+            return -1;
     }
     mm->start_brk = mm->brk = end;
 
@@ -352,16 +336,16 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
     if (total_size)
     {
         total_size = ELF_PAGEALIGN(total_size);
-        map_addr = mmap((void *)addr, total_size, prot, type, _fd, off);
+        map_addr = (unsigned long)mmap((void *)addr, total_size, prot, type, _fd, off);
         if (!(map_addr >= 0xffffffffUL))
             munmap((void *)map_addr + size, total_size - size);
     }
     else
-        map_addr = mmap((void *)addr, size, prot, type, _fd, off);
+        map_addr = (unsigned long)mmap((void *)addr, size, prot, type, _fd, off);
     close(_fd);
 
     if (IS_DEBUG)
-        printf("mapping %p-%p to %p, %p?, %d\n", off, off + size, map_addr, addr, errno);
+        printf("mapping %p-%p to %p, %p?, %d\n", (void *)off, (void *)(off + size), (void *)map_addr, (void *)addr, errno);
 
     return (map_addr);
 }
@@ -374,33 +358,16 @@ static unsigned long elf_map_partial_page(FILE *fp, unsigned long base_addr,
                                           int type, const char *filename)
 {
     unsigned long map_addr;
-    // unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
-    // unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
     unsigned long addr_start = base_addr + off;
     unsigned long file_start = base_file_off + off;
     unsigned long size = PAGE_SIZE;
-    // if (IS_DEBUG)
-    //     ("elf map %p\n", addr_start);
-    // addr = ELF_PAGESTART(addr);
-    // size = ELF_PAGEALIGN(size);
-
-    // if (!size)
-    //     return addr;
 
     int _fd = open(filename, O_RDONLY);
-    // if (total_size)
-    // {
-    //     total_size = ELF_PAGEALIGN(total_size);
-    //     map_addr = mmap((void *)addr, total_size, prot, type, _fd, off);
-    //     if (!(map_addr >= 0xffffffffUL))
-    //         munmap((void *)map_addr + size, total_size - size);
-    // }
-    // else
-    map_addr = mmap((void *)addr_start, size, prot, type, _fd, file_start);
+    map_addr = (unsigned long)mmap((void *)addr_start, size, prot, type, _fd, file_start);
     close(_fd);
 
     if (IS_DEBUG)
-        printf("partial mapping %p-%p to %p, %p?, %d\n", file_start, file_start + size, map_addr, addr_start, errno);
+        printf("partial mapping %p-%p to %p, %p?, %d\n", (void *)file_start, (void *)(file_start + size), (void *)map_addr, (void *)addr_start, errno);
 
     return (map_addr);
 }
@@ -418,11 +385,11 @@ void *elf_map_dpage(struct usrld_binprm *bprm,
         if (dpage->base_vaddr <= addr && addr < dpage->base_vaddr + dpage->max_size)
         {
             unsigned long off = ELF_PAGESTART(addr - dpage->base_vaddr);
-            return elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off,
-                                        off,
-                                        dpage->elf_prot,
-                                        dpage->elf_flags,
-                                        bprm->filename);
+            return (void *)elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off,
+                                                off,
+                                                dpage->elf_prot,
+                                                dpage->elf_flags,
+                                                bprm->filename);
         }
     }
     return -1;
@@ -459,7 +426,7 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
     u_platform = NULL;
     if (get_aux_value(AT_PLATFORM))
     {
-        char *platform_ptr = get_aux_value(AT_PLATFORM);
+        char *platform_ptr = (char *)get_aux_value(AT_PLATFORM);
         size_t len = strlen(platform_ptr) + 1;
         u_platform = (Elf64_Addr *)STACK_ALLOC(p, len);
         memcpy(u_platform, platform_ptr, len);
@@ -468,7 +435,7 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
     u_base_platform = NULL;
     if (get_aux_value(AT_BASE_PLATFORM))
     {
-        char *platform_ptr = get_aux_value(AT_BASE_PLATFORM);
+        char *platform_ptr = (char *)get_aux_value(AT_BASE_PLATFORM);
         size_t len = strlen(platform_ptr) + 1;
         u_base_platform = (Elf64_Addr *)STACK_ALLOC(p, len);
         memcpy(u_base_platform, platform_ptr, len);
@@ -477,32 +444,20 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
     u_rand_bytes = NULL;
     if (get_aux_value(AT_RANDOM))
     {
-        char *rand_ptr = get_aux_value(AT_RANDOM);
+        char *rand_ptr = (char *)get_aux_value(AT_RANDOM);
         size_t len = 16;
         u_rand_bytes = (Elf64_Addr *)STACK_ALLOC(p, len);
         memcpy(u_rand_bytes, rand_ptr, len);
     }
 
-    // srand(time(NULL));
-    // int randb = rand();
-    // memcpy(&k_rand_bytes, &randb, 4);
-    // randb = rand();
-    // memcpy(&k_rand_bytes[4], &randb, 4);
-    // randb = rand();
-    // memcpy(&k_rand_bytes[8], &randb, 4);
-    // randb = rand();
-    // memcpy(&k_rand_bytes[12], &randb, 4);
-    // u_rand_bytes = (Elf64_Addr *)STACK_ALLOC(p, sizeof(k_rand_bytes));
-    // memcpy(u_rand_bytes, k_rand_bytes, sizeof(k_rand_bytes));
-
     elf_info = (Elf64_Addr *)bprm->mm->saved_auxv;
-#define NEW_AUX_ENT(id, val)               \
-    do                                     \
-    {                                      \
-        elf_info[ei_index++] = id;         \
-        elf_info[ei_index++] = val;        \
-        if (IS_DEBUG)                      \
-            printf("%s: %ld\n", #id, val); \
+#define NEW_AUX_ENT(id, val)                     \
+    do                                           \
+    {                                            \
+        elf_info[ei_index++] = id;               \
+        elf_info[ei_index++] = (Elf64_Addr)val;  \
+        if (IS_DEBUG)                            \
+            printf("%s: %ld\n", #id, (long)val); \
     } while (0)
     NEW_AUX_ENT(AT_HWCAP, get_aux_value(AT_HWCAP));
     NEW_AUX_ENT(AT_PAGESZ, get_aux_value(AT_PAGESZ));
@@ -616,9 +571,5 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
     asm("mov %0, %%es" ::"r"(v));
 
     asm("movq %0, %%rsp" ::"r"(pp));
-    // asm("movq %0, %%rbp" ::"r"(pp));
-    // asm("movq $0, %rbp");
-    // asm("jmp *%0" ::"r"(&jmp_target));
     asm("jmp *%0" ::"r"(jmp_target));
-    // asm("jmp %eax");
 }
