@@ -17,7 +17,13 @@ int main(int argc, char *argv[], char *envp[])
 {
     srand(time(NULL));
 
+#ifdef DPAGER
+    struct sigaction act = {0};
+    act.sa_sigaction = sig_segv_handler;
+    act.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &act, NULL);
     // signal(SIGSEGV, (void *)sig_segv_handler);
+#endif
     // unsigned long add = getauxval(AT_PAGESZ);
     // printf("HWCAP: %ld\n", *((long *)add));
     // mmap(0x400000, 100, PROT_READ| PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
@@ -26,6 +32,8 @@ int main(int argc, char *argv[], char *envp[])
     if (is_exec < 0)
         exit(-1);
 }
+
+struct usrld_binprm *target_bprm;
 
 int cexecve(const char *filename, const char *argv[], const char *envp[])
 {
@@ -40,6 +48,9 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
     bprm = malloc(sizeof(struct usrld_binprm));
     if (!bprm)
         goto out_ret;
+#ifdef DPAGER
+    list_init(&bprm->dpage_list);
+#endif
 
     retval = -EBADFD;
     bprm->fp = fp = fopen(filename, "r");
@@ -74,6 +85,8 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
     retval = copy_strings(bprm->argc, argv, bprm);
     if (retval < 0)
         goto out_free;
+
+    target_bprm = bprm;
 
     retval = exec_binprm(bprm);
     if (retval < 0)
@@ -288,3 +301,21 @@ int setup_arg_pages(struct usrld_binprm *bprm,
 
     // omit stack_shift: bprm_mm_init에서 이미 randomize를 했기 때문
 }
+
+#ifdef DPAGER
+void sig_segv_handler(int signo, siginfo_t *info, void *ucontext)
+{
+    if (IS_DEBUG)
+        printf("received SIGSEGV @%p\n", info->si_addr);
+    if (info->si_addr == NULL)
+    {
+        printf("Segmentation fault (core not dumped:))\n");
+        _exit(-1);
+    }
+    if (elf_map_dpage(target_bprm, info->si_addr) < 0)
+    {
+        printf("failed mapping exe @%p\n", info->si_addr);
+        _exit(-1);
+    }
+}
+#endif

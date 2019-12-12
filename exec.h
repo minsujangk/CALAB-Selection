@@ -6,6 +6,8 @@
 #define CALAB_SELECTION_PAGER_H
 
 #include "binfmts.h"
+#include <signal.h>
+#include <unistd.h>
 
 #define IS_DEBUG 0
 
@@ -17,5 +19,9 @@ static int copy_strings(int argc, const char *argv[], struct usrld_binprm *bprm)
 static int exec_binprm(struct usrld_binprm *bprm);
 int setup_arg_pages(struct usrld_binprm *bprm, unsigned long stack_top,
                     int executable_stack);
+
+#ifdef DPAGER
+void sig_segv_handler(int signom, siginfo_t *info, void *ucontext);
+#endif
 
 #endif //CALAB_SELECTION_PAGER_H
