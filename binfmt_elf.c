@@ -325,7 +325,14 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
     unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
     unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
     if (IS_DEBUG)
-        ("elf map %p\n", addr);
+        printf("elf map %p\n", addr);
+
+    if (!addr)
+    {
+        printf("Load rejected: address space overlapped\n");
+        exit(-1);
+    }
+
     addr = ELF_PAGESTART(addr);
     size = ELF_PAGEALIGN(size);
 
@@ -361,6 +368,12 @@ static unsigned long elf_map_partial_page(FILE *fp, unsigned long base_addr,
     unsigned long addr_start = base_addr + off;
     unsigned long file_start = base_file_off + off;
     unsigned long size = PAGE_SIZE;
+
+    if (!base_addr)
+    {
+        printf("Load rejected: address space overlapped\n");
+        exit(-1);
+    }
 
     int _fd = open(filename, O_RDONLY);
     map_addr = (unsigned long)mmap((void *)addr_start, size, prot, type, _fd, file_start);
