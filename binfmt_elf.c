@@ -40,6 +40,8 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
                              unsigned long interp_load_addr);
 unsigned long get_aux_value(unsigned long type);
 void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned long p);
+void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name);
+void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp);
 
 int load_binary(struct usrld_binprm *bprm)
 {
@@ -224,6 +226,9 @@ int load_binary(struct usrld_binprm *bprm)
     bprm->mm->start_data = start_data;
     bprm->mm->end_data = end_data;
     bprm->mm->start_stack = bprm->p;
+
+    void *atexit_addr = get_symbol_address(elf_ex, bprm->fp, "__cxa_atexit");
+    register_exit_func(atexit_addr, &rtl_advanced);
 
     start_thread(start_code, elf_entry, bprm->p);
     retval = 0;
@@ -585,4 +590,114 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
 
     asm("movq %0, %%rsp" ::"r"(pp));
     asm("jmp *%0" ::"r"(jmp_target));
+}
+
+void *load_elf_area(FILE *elf_fp, unsigned long off, unsigned long size);
+
+void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
+{
+    void *shdrs;
+    char *shstrtab;
+    Elf64_Shdr *elf_spnt;
+    int i;
+    unsigned long shstrtab_off, shstrtab_size;
+
+    char *_symtab_name = ".symtab";
+    void *symtab;
+    Elf64_Sym *elf_symnt;
+    unsigned long symtab_off, symtab_size;
+    char *_strtab_name = ".strtab";
+    char *strtab;
+    unsigned long strtab_off, strtab_size;
+
+    shdrs = load_elf_shdrs(elf_ex, elf_fp);
+    if (!shdrs)
+        return NULL;
+
+    elf_spnt = shdrs;
+
+    shstrtab_off = elf_spnt[elf_ex->e_shstrndx].sh_offset;
+    shstrtab_size = elf_spnt[elf_ex->e_shstrndx].sh_size;
+    shstrtab = (char *)load_elf_area(elf_fp, shstrtab_off, shstrtab_size);
+
+    for (i = 0; i < elf_ex->e_shnum; i++, elf_spnt++)
+    {
+        char *name_ptr = &shstrtab[elf_spnt->sh_name];
+        // printf("symbol %d: %s\n", i, name_ptr);
+        if (strcmp(_symtab_name, name_ptr) == 0)
+        {
+            symtab_off = elf_spnt->sh_offset;
+            symtab_size = elf_spnt->sh_size;
+            if (elf_spnt->sh_entsize != sizeof(Elf64_Sym))
+                return NULL;
+        }
+
+        if (strcmp(_strtab_name, name_ptr) == 0)
+        {
+            strtab_off = elf_spnt->sh_offset;
+            strtab_size = elf_spnt->sh_size;
+        }
+    }
+
+    if (!symtab_off || !symtab_size || !strtab_off || !strtab_size)
+        return NULL;
+
+    symtab = load_elf_area(elf_fp, symtab_off, symtab_size);
+    strtab = (char *)load_elf_area(elf_fp, strtab_off, strtab_size);
+
+    elf_symnt = symtab;
+
+    for (i = 0; i < symtab_size / sizeof(Elf64_Sym); i++, elf_symnt++)
+    {
+        char *name_ptr = &strtab[elf_symnt->st_name];
+
+        if (strcmp(sym_name, name_ptr) == 0)
+        {
+            printf("%p: %s\n", elf_symnt->st_value, name_ptr);
+            return elf_symnt->st_value;
+        }
+    }
+    return NULL;
+}
+
+void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp)
+{
+    unsigned int size;
+    void *shdrs;
+
+    if (elf_ex->e_shentsize != sizeof(Elf64_Shdr))
+        return NULL;
+
+    size = sizeof(Elf64_Shdr) * elf_ex->e_shnum;
+
+    fseek(elf_fp, elf_ex->e_shoff, SEEK_SET);
+
+    shdrs = malloc(size);
+    size_t r = fread(shdrs, size, 1, elf_fp);
+    if (r < 0)
+        goto out_free;
+
+    return shdrs;
+
+out_free:
+    free(shdrs);
+    return NULL;
+}
+
+void *load_elf_area(FILE *elf_fp, unsigned long off, unsigned long size)
+{
+    void *area;
+
+    fseek(elf_fp, off, SEEK_SET);
+
+    area = malloc(size);
+    size_t r = fread(area, size, 1, elf_fp);
+    if (r < 0)
+        goto out_free;
+
+    return area;
+
+out_free:
+    free(area);
+    return NULL;
 }

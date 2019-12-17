@@ -5,7 +5,6 @@
 #include "exec.h"
 #include "mm.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
@@ -23,10 +22,19 @@ int main(int argc, char *argv[], char *envp[])
     act.sa_flags = SA_SIGINFO;
     sigaction(SIGSEGV, &act, NULL);
 #endif
+
+    printf("perhaps.. %p\n", &atexit);
+    // register_exit_func(&atexit, &rtl_advanced);
+    // atexit(&rtl_advanced);
     int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
 
     if (is_exec < 0)
         exit(-1);
+
+    asm("advance:");
+    printf("return success! welcome!!\n");
+
+    return 0;
 }
 
 struct usrld_binprm *target_bprm;
@@ -92,6 +100,7 @@ out_free:
     free(bprm);
 
 out_ret:
+    printf("exited here?\n");
     return retval;
 }
 
@@ -275,6 +284,22 @@ int setup_arg_pages(struct usrld_binprm *bprm,
     // omit stack_shift: bprm_mm_init에서 이미 randomize를 했기 때문
 }
 
+void register_exit_func(void *atexit_addr, void (*func)(void))
+{
+
+    printf("pushing func@%p with atexit@%p\n", func, atexit_addr);
+    asm("movq %0, %%rdi" ::"r"(func));
+    asm("movq $0, %rsi");
+    asm("movq $0, %rdx");
+    asm("call *%0" ::"r"(atexit_addr));
+}
+
+void rtl_advanced()
+{
+    // printf("htshidsfs\n");
+    asm("jmp advance");
+}
+
 #ifdef DPAGER
 void sig_segv_handler(int signo, siginfo_t *info, void *ucontext)
 {
@@ -291,4 +316,5 @@ void sig_segv_handler(int signo, siginfo_t *info, void *ucontext)
         _exit(-1);
     }
 }
+
 #endif
