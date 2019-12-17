@@ -11,6 +11,11 @@
 #include <string.h>
 
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top);
+int loading_binary = 0;
+const char *bin1;
+const char **argv1;
+const char *bin2;
+const char **argv2;
 
 int main(int argc, char *argv[], char *envp[])
 {
@@ -23,6 +28,34 @@ int main(int argc, char *argv[], char *envp[])
     sigaction(SIGSEGV, &act, NULL);
 #endif
 
+    int i;
+    for (i = 0; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-2") == 0)
+        {
+            loading_binary = 1;
+            argv[i] = NULL; // change for first binary
+
+            // -2 이후에는 다음 바이너리.
+            bin1 = argv[1];
+            argv1 = (const char **)&argv[2];
+            bin2 = argv[i + 1];
+            argv2 = (const char **)&argv[i + 2];
+
+            int is_exec = cexecve(bin1, argv1, (const char **)envp);
+
+            asm("advance1:");
+            printf("alright! let's go to binary 2: %s\n", bin2);
+            loading_binary = 2;
+
+            is_exec = cexecve(bin2, argv2, (const char **)envp);
+            asm("advance2:");
+            printf("all done!\n");
+
+            goto out;
+        }
+    }
+
     printf("perhaps.. %p\n", &atexit);
     // register_exit_func(&atexit, &rtl_advanced);
     // atexit(&rtl_advanced);
@@ -34,6 +67,7 @@ int main(int argc, char *argv[], char *envp[])
     asm("advance:");
     printf("return success! welcome!!\n");
 
+out:
     return 0;
 }
 
@@ -297,7 +331,12 @@ void register_exit_func(void *atexit_addr, void (*func)(void))
 void rtl_advanced()
 {
     // printf("htshidsfs\n");
-    asm("jmp advance");
+    if (loading_binary == 1)
+        asm("jmp advance1");
+    else if (loading_binary == 2)
+        asm("jmp advance2");
+    else
+        asm("jmp advance");
 }
 
 #ifdef DPAGER
