@@ -34,7 +34,7 @@ static int set_brk(unsigned long start, unsigned long end, int prot,
 static inline int make_prot(Elf64_Word p_flags);
 static unsigned long elf_map(FILE *fp, unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
-                             unsigned long total_size, const char *filename);
+                             unsigned long total_size, const char *filename, struct list *map_list);
 static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
                              unsigned long load_addr,
                              unsigned long interp_load_addr);
@@ -42,6 +42,8 @@ unsigned long get_aux_value(unsigned long type);
 void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned long p);
 void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name);
 void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp);
+
+extern unsigned long saved_rsp;
 
 int load_binary(struct usrld_binprm *bprm)
 {
@@ -111,7 +113,7 @@ int load_binary(struct usrld_binprm *bprm)
             {
 #ifdef DPAGER
                 elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off, ELF_PAGESTART(elf_bss) - dpage->base_vaddr,
-                                     dpage->elf_prot, dpage->elf_flags, bprm->filename);
+                                     dpage->elf_prot, dpage->elf_flags, bprm->filename, &bprm->map_list);
 #endif
 
                 nbyte = ELF_MIN_ALIGN - nbyte;
@@ -140,7 +142,7 @@ int load_binary(struct usrld_binprm *bprm)
 
 #ifndef DPAGER
         error = elf_map(bprm->fp, load_bias + vaddr, elf_ppnt,
-                        elf_prot, elf_flags, total_size, bprm->filename);
+                        elf_prot, elf_flags, total_size, bprm->filename, &bprm->map_list);
 #endif
 #ifdef DPAGER
         dpage = malloc(sizeof(struct usrld_dpage));
@@ -150,7 +152,7 @@ int load_binary(struct usrld_binprm *bprm)
         dpage->elf_flags = elf_flags;
         dpage->max_size = ELF_PAGEALIGN(elf_ppnt->p_filesz + ELF_PAGEOFFSET(vaddr));
         list_push_back(&bprm->dpage_list, &dpage->elem);
-        error = elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off, 0, elf_prot, elf_flags, bprm->filename);
+        error = elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off, 0, elf_prot, elf_flags, bprm->filename, &bprm->map_list);
         if (IS_DEBUG)
             printf("dpage added %p-%p\n", (void *)dpage->base_vaddr, (void *)(dpage->base_vaddr + dpage->max_size));
 
@@ -207,7 +209,7 @@ int load_binary(struct usrld_binprm *bprm)
     {
 #ifdef DPAGER
         elf_map_partial_page(bprm->fp, dpage->base_vaddr, dpage->base_file_off, ELF_PAGESTART(elf_bss) - dpage->base_vaddr,
-                             dpage->elf_prot, dpage->elf_flags, bprm->filename);
+                             dpage->elf_prot, dpage->elf_flags, bprm->filename, &bprm->map_list);
 #endif
 
         nbyte = ELF_MIN_ALIGN - nbyte;
@@ -226,6 +228,9 @@ int load_binary(struct usrld_binprm *bprm)
     bprm->mm->start_data = start_data;
     bprm->mm->end_data = end_data;
     bprm->mm->start_stack = bprm->p;
+    
+    free(bprm->mm);
+    free(bprm->vma);
 
     void *atexit_addr = get_symbol_address(elf_ex, bprm->fp, "__cxa_atexit");
     register_exit_func(atexit_addr, &rtl_advanced);
@@ -324,7 +329,7 @@ static inline int make_prot(Elf64_Word p_flags)
 
 static unsigned long elf_map(FILE *fp, unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
-                             unsigned long total_size, const char *filename)
+                             unsigned long total_size, const char *filename, struct list *map_list)
 {
     unsigned long map_addr;
     unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
@@ -356,6 +361,14 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
         map_addr = (unsigned long)mmap((void *)addr, size, prot, type, _fd, off);
     close(_fd);
 
+    struct map_entry *mentry = (struct map_entry *)malloc(sizeof(struct map_entry));
+    mentry->addr = map_addr;
+    if (total_size)
+        mentry->len = total_size;
+    else
+        mentry->len = size;
+    list_push_back(map_list, &mentry->elem);
+
     if (IS_DEBUG)
         printf("mapping %p-%p to %p, %p?, %d\n", (void *)off, (void *)(off + size), (void *)map_addr, (void *)addr, errno);
 
@@ -367,7 +380,7 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
 static unsigned long elf_map_partial_page(FILE *fp, unsigned long base_addr,
                                           unsigned long base_file_off,
                                           unsigned long off, int prot,
-                                          int type, const char *filename)
+                                          int type, const char *filename, struct list *map_list)
 {
     unsigned long map_addr;
     unsigned long addr_start = base_addr + off;
@@ -383,6 +396,11 @@ static unsigned long elf_map_partial_page(FILE *fp, unsigned long base_addr,
     int _fd = open(filename, O_RDONLY);
     map_addr = (unsigned long)mmap((void *)addr_start, size, prot, type, _fd, file_start);
     close(_fd);
+
+    struct map_entry *mentry = (struct map_entry *)malloc(sizeof(struct map_entry));
+    mentry->addr = map_addr;
+    mentry->len = size;
+    list_push_back(map_list, &mentry->elem);
 
     if (IS_DEBUG)
         printf("partial mapping %p-%p to %p, %p?, %d\n", (void *)file_start, (void *)(file_start + size), (void *)map_addr, (void *)addr_start, errno);
@@ -407,7 +425,7 @@ void *elf_map_dpage(struct usrld_binprm *bprm,
                                                 off,
                                                 dpage->elf_prot,
                                                 dpage->elf_flags,
-                                                bprm->filename);
+                                                bprm->filename, &bprm->map_list);
         }
     }
     return -1;
@@ -566,7 +584,7 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
     unsigned long jmp_target = elf_entry;
     unsigned long pp = p;
     short v = 0;
-    asm("movq %0, %%rax" ::"r"(jmp_target));
+    asm("movq $0, %rax");
     asm("movq $0, %rbx");
     asm("movq $0, %rcx");
     asm("movq $0, %rdx");
@@ -654,9 +672,19 @@ void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
         if (strcmp(sym_name, name_ptr) == 0)
         {
             printf("%p: %s\n", elf_symnt->st_value, name_ptr);
+            free(shdrs);
+            free(shstrtab);
+            free(symtab);
+            free(strtab);
             return elf_symnt->st_value;
         }
     }
+
+    free(shdrs);
+    free(shstrtab);
+    free(symtab);
+    free(strtab);
+
     return NULL;
 }
 

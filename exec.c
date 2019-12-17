@@ -12,6 +12,37 @@
 
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top);
 
+int loading_binary = 0;
+unsigned long saved_rsp;
+unsigned long saved_rbp;
+unsigned long saved_rax;
+unsigned long saved_rbx;
+unsigned long saved_rcx;
+unsigned long saved_rdx;
+unsigned long saved_rsi;
+unsigned long saved_rdi;
+unsigned long saved_r8;
+unsigned long saved_r9;
+unsigned long saved_r10;
+unsigned long saved_r11;
+unsigned long saved_r12;
+unsigned long saved_r13;
+unsigned long saved_r14;
+unsigned long saved_r15;
+short saved_fs;
+short saved_gs;
+short saved_ds;
+short saved_es;
+
+const char *bin1;
+const char **argv1;
+const char *bin2;
+const char **argv2;
+
+int old_argc;
+char **old_argv;
+char **old_envp;
+
 int main(int argc, char *argv[], char *envp[])
 {
     srand(time(NULL));
@@ -26,6 +57,78 @@ int main(int argc, char *argv[], char *envp[])
     printf("perhaps.. %p\n", &atexit);
     // register_exit_func(&atexit, &rtl_advanced);
     // atexit(&rtl_advanced);
+
+    int i;
+    for (i = 0; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-2") == 0)
+        {
+            loading_binary = 1;
+            argv[i] = NULL; // change for first binary
+
+            // -2 이후에는 다음 바이너리.
+            bin1 = argv[1];
+            argv1 = (const char **)&argv[2];
+            bin2 = argv[i + 1];
+            argv2 = (const char **)&argv[i + 2];
+
+            asm("movq %%rbp, %0"
+                : "=r"(saved_rbp));
+            asm("movq %%rsp, %0"
+                : "=r"(saved_rsp));
+            asm("movq %%rax, %0"
+                : "=r"(saved_rax));
+            asm("movq %%rbx, %0"
+                : "=r"(saved_rbx));
+            asm("movq %%rcx, %0"
+                : "=r"(saved_rcx));
+            asm("movq %%rdx, %0"
+                : "=r"(saved_rdx));
+            asm("movq %%rsi, %0"
+                : "=r"(saved_rsi));
+            asm("movq %%rdi, %0"
+                : "=r"(saved_rdi));
+
+            asm("movq %%r8, %0"
+                : "=r"(saved_r8));
+            asm("movq %%r9, %0"
+                : "=r"(saved_r9));
+            asm("movq %%r10, %0"
+                : "=r"(saved_r10));
+            asm("movq %%r11, %0"
+                : "=r"(saved_r11));
+            asm("movq %%r12, %0"
+                : "=r"(saved_r12));
+            asm("movq %%r13, %0"
+                : "=r"(saved_r13));
+            asm("movq %%r14, %0"
+                : "=r"(saved_r14));
+            asm("movq %%r15, %0"
+                : "=r"(saved_r15));
+
+            asm("mov %%fs, %0"
+                : "=r"(saved_fs));
+            asm("mov %%gs, %0"
+                : "=r"(saved_fs));
+            asm("mov %%ds, %0"
+                : "=r"(saved_fs));
+            asm("mov %%es, %0"
+                : "=r"(saved_fs));
+
+            int is_exec = cexecve(bin1, argv1, (const char **)envp);
+
+            asm("advance1:");
+            printf("alright! let's go to binary 2: %s\n", bin2);
+            loading_binary = 2;
+
+            is_exec = cexecve(bin2, argv2, (const char **)envp);
+            asm("advance2:");
+            printf("all done!\n");
+
+            goto out;
+        }
+    }
+
     int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
 
     if (is_exec < 0)
@@ -33,11 +136,12 @@ int main(int argc, char *argv[], char *envp[])
 
     asm("advance:");
     printf("return success! welcome!!\n");
-
+out:
     return 0;
 }
 
-struct usrld_binprm *target_bprm;
+static struct usrld_binprm init_bprm;
+struct usrld_binprm *target_bprm = &init_bprm;
 
 int cexecve(const char *filename, const char *argv[], const char *envp[])
 {
@@ -49,12 +153,15 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
         return -1;
 
     retval = -ENOMEM;
-    bprm = malloc(sizeof(struct usrld_binprm));
+    void *ff = malloc(sizeof(struct usrld_binprm));
+    // bprm = ff;
+    bprm = &init_bprm;
     if (!bprm)
         goto out_ret;
 #ifdef DPAGER
     list_init(&bprm->dpage_list);
 #endif
+    list_init(&bprm->map_list);
 
     retval = -EBADFD;
     bprm->fp = fp = fopen(filename, "r");
@@ -136,7 +243,7 @@ int bprm_mm_init(struct usrld_binprm *bprm)
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top)
 {
     int random_variable = rand();
-    random_variable &= 0x3ff; // 4MB mask not to exceed stack limit (8MB)
+    random_variable &= 0x1ff; // 2MB mask not to exceed stack limit (8MB)
     random_variable <<= PAGE_SHIFT;
 
     return PAGE_ALIGN(stack_top) - random_variable;
@@ -296,8 +403,105 @@ void register_exit_func(void *atexit_addr, void (*func)(void))
 
 void rtl_advanced()
 {
-    // printf("htshidsfs\n");
-    asm("jmp advance");
+    // finalize_bprm(target_bprm);
+    printf("htshidsfs %p\n", saved_rsp);
+
+    // asm("movq %0, %%rax" ::"r"(saved_rax));
+    // asm("movq %0, %%rbx" ::"r"(saved_rbx));
+    // asm("movq %0, %%rcx" ::"r"(saved_rcx));
+    // asm("movq %0, %%rdx" ::"r"(saved_rdx));
+    // asm("movq %0, %%rsi" ::"r"(saved_rsi));
+    // asm("movq %0, %%rdi" ::"r"(saved_rdi));
+
+    // asm("movq %0, %%r8" ::"r"(saved_r8));
+    // asm("movq %0, %%r9" ::"r"(saved_r9));
+    // asm("movq %0, %%r10" ::"r"(saved_r10));
+    // asm("movq %0, %%r11" ::"r"(saved_r11));
+    // asm("movq %0, %%r12" ::"r"(saved_r12));
+    // asm("movq %0, %%r13" ::"r"(saved_r13));
+    // asm("movq %0, %%r14" ::"r"(saved_r14));
+    // asm("movq %0, %%r15" ::"r"(saved_r15));
+
+    // asm("mov %0, %%fs" ::"r"(saved_fs));
+    // asm("mov %0, %%gs" ::"r"(saved_gs));
+    // asm("mov %0, %%ds" ::"r"(saved_ds));
+    // asm("mov %0, %%es" ::"r"(saved_es));
+    short v = 0;
+
+    // asm("movq $0, %rax");
+    // asm("movq $0, %rbx");
+    // asm("movq $0, %rcx");
+    // asm("movq $0, %rdx");
+
+    // asm("movq $0, %rsi");
+    // asm("movq $0, %rdi");
+
+    // asm("movq $0, %r8");
+    // asm("movq $0, %r9");
+    // asm("movq $0, %r10");
+    // asm("movq $0, %r11");
+    // asm("movq $0, %r12");
+    // asm("movq $0, %r13");
+    // asm("movq $0, %r14");
+    // asm("movq $0, %r15");
+
+    // asm("mov %0, %%fs" ::"r"(v));
+    // asm("mov %0, %%gs" ::"r"(v));
+    // asm("mov %0, %%ds" ::"r"(v));
+    // asm("mov %0, %%es" ::"r"(v));
+    // unsigned long cur_rsp;
+    // asm("movq %%rsp, %0"
+    //     : "=r"(cur_rsp));
+    // memset(cur_rsp, 0, saved_rsp - cur_rsp);
+
+    // asm("movq %0, %%rbp" ::"r"(saved_rbp));
+    // asm("movq %0, %%rsp" ::"r"(saved_rsp));
+
+    if (loading_binary == 1)
+        asm("jmp advance1");
+    else if (loading_binary == 2)
+        asm("jmp advance2");
+    else
+        asm("jmp advance");
+}
+
+void finalize_bprm(struct usrld_binprm *bprm)
+{
+    struct list_elem *e;
+    for (e = list_begin(&bprm->map_list);
+         e != list_end(&bprm->map_list);
+         e = list_next(e))
+    {
+        struct map_entry *mentry = list_entry(e, struct map_entry, elem);
+        printf("munmap %p, %d\n", mentry->addr, mentry->len);
+        void *addr = mentry->addr;
+        size_t len = mentry->len;
+        free(mentry);
+        int r = munmap(addr, len);
+        if (r < 0)
+            exit(1);
+        // free(mentry);
+    }
+
+    // // struct list_elem *e;
+    // for (e = list_begin(&bprm->map_list);
+    //      e != list_end(&bprm->map_list);
+    //      e = list_next(e))
+    // {
+    //     struct map_entry *mentry = list_entry(e, struct map_entry, elem);
+    //     printf("munmap %p, %d\n", mentry->addr, mentry->len);
+    //     void *addr = mentry->addr;
+    //     size_t len = mentry->len;
+    //     free(mentry);
+    //     int r = munmap(addr, len);
+    //     if (r < 0)
+    //         exit(1);
+    //     // free(mentry);
+    // }
+
+    // free(bprm->mm);
+    // free(bprm->vma);
+    // free(bprm);
 }
 
 #ifdef DPAGER
