@@ -43,7 +43,8 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
 void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name);
 void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp);
 
-extern unsigned long saved_rsp;
+// extern unsigned long saved_rsp;
+extern int loading_binary;
 
 int load_binary(struct usrld_binprm *bprm)
 {
@@ -217,6 +218,9 @@ int load_binary(struct usrld_binprm *bprm)
     }
     elf_entry = elf_ex->e_entry;
 
+    if (loading_binary == 2)
+        elf_entry += 0x2000000;
+
     free(elf_phdata);
 
     retval = create_elf_tables(bprm, elf_ex, load_addr, 0);
@@ -228,7 +232,7 @@ int load_binary(struct usrld_binprm *bprm)
     bprm->mm->start_data = start_data;
     bprm->mm->end_data = end_data;
     bprm->mm->start_stack = bprm->p;
-    
+
     free(bprm->mm);
     free(bprm->vma);
 
@@ -302,6 +306,10 @@ static int set_brk(unsigned long start, unsigned long end, int prot,
             return -ENOMEM;
         if (!len)
             return 0;
+
+        if (loading_binary == 2)
+            addr += 0x2000000;
+
         if (IS_DEBUG)
             printf("brkb %p-%p\n", (void *)addr, (void *)(addr + len));
         ret = mmap((void *)addr, len, prot,
@@ -334,6 +342,10 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
     unsigned long map_addr;
     unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
     unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
+
+    if (loading_binary == 2)
+        addr += 0x2000000;
+
     if (IS_DEBUG)
         printf("elf map %p\n", addr);
 
@@ -386,6 +398,9 @@ static unsigned long elf_map_partial_page(FILE *fp, unsigned long base_addr,
     unsigned long addr_start = base_addr + off;
     unsigned long file_start = base_file_off + off;
     unsigned long size = PAGE_SIZE;
+
+    if (loading_binary == 2)
+        base_addr += 0x2000000;
 
     if (!base_addr)
     {
