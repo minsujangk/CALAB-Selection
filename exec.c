@@ -16,6 +16,11 @@ const char *bin1;
 const char **argv1;
 const char *bin2;
 const char **argv2;
+const char **envps;
+
+unsigned long stack_amount;
+unsigned long saved_rbp;
+unsigned long saved_rsp;
 
 int main(int argc, char *argv[], char *envp[])
 {
@@ -41,14 +46,21 @@ int main(int argc, char *argv[], char *envp[])
             argv1 = (const char **)&argv[2];
             bin2 = argv[i + 1];
             argv2 = (const char **)&argv[i + 2];
+            envps = envp;
 
-            int is_exec = cexecve(bin1, argv1, (const char **)envp);
+            asm("movq %%rbp, %0"
+                : "=r"(saved_rbp));
+            asm("movq %%rsp, %0"
+                : "=r"(saved_rsp));
+            stack_amount = saved_rbp - saved_rsp;
+
+            int is_exec = cexecve(bin1, argv1, (const char **)envps);
 
             asm("advance1:");
             printf("alright! let's go to binary 2: %s\n", bin2);
             loading_binary = 2;
 
-            is_exec = cexecve(bin2, argv2, (const char **)envp);
+            is_exec = cexecve(bin2, argv2, (const char **)envps);
             asm("advance2:");
             printf("all done!\n");
 
@@ -129,6 +141,8 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
     retval = exec_binprm(bprm);
     if (retval < 0)
         goto out_free;
+
+    start_thread(bprm->mm->start_code, bprm->elf_entry, bprm->p);
 
 out_free:
     free(bprm);
@@ -330,6 +344,12 @@ void register_exit_func(void *atexit_addr, void (*func)(void))
 
 void rtl_advanced()
 {
+    unsigned long cur_rsp;
+    asm("subq %0, %%rsp" ::"r"(stack_amount));
+    asm("mov %%rsp, %0"
+        : "=r"(cur_rsp));
+    memcpy(cur_rsp, saved_rsp, stack_amount);
+
     // printf("htshidsfs\n");
     if (loading_binary == 1)
         asm("jmp advance1");

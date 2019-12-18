@@ -39,7 +39,6 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
                              unsigned long load_addr,
                              unsigned long interp_load_addr);
 unsigned long get_aux_value(unsigned long type);
-void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned long p);
 void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name);
 void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp);
 
@@ -213,7 +212,7 @@ int load_binary(struct usrld_binprm *bprm)
         nbyte = ELF_MIN_ALIGN - nbyte;
         memset((void *)elf_bss, 0, nbyte);
     }
-    elf_entry = elf_ex->e_entry;
+    bprm->elf_entry = elf_entry = elf_ex->e_entry;
 
     free(elf_phdata);
 
@@ -230,7 +229,7 @@ int load_binary(struct usrld_binprm *bprm)
     void *atexit_addr = get_symbol_address(elf_ex, bprm->fp, "__cxa_atexit");
     register_exit_func(atexit_addr, &rtl_advanced);
 
-    start_thread(start_code, elf_entry, bprm->p);
+    // start_thread(start_code, elf_entry, bprm->p);
     retval = 0;
 out:
 out_ret:

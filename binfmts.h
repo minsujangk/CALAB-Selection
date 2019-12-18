@@ -34,12 +34,15 @@ struct usrld_binprm
 
     char buf[USRLD_BINPRM_BUF_SIZE]; // save first 128 byte of file
 
+    unsigned long elf_entry; 
+
 #ifdef DPAGER
     struct list dpage_list;
 #endif
 };
 
 int load_binary(struct usrld_binprm *bprm);
+void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned long p);
 
 #ifdef DPAGER
 struct usrld_dpage
