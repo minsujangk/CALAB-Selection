@@ -22,6 +22,10 @@ unsigned long stack_amount;
 unsigned long saved_rbp;
 unsigned long saved_rsp;
 
+struct usrld_binprm btb_bprms[2];
+
+struct usrld_binprm *target_bprm;
+
 int main(int argc, char *argv[], char *envp[])
 {
     srand(time(NULL));
@@ -54,24 +58,29 @@ int main(int argc, char *argv[], char *envp[])
                 : "=r"(saved_rsp));
             stack_amount = saved_rbp - saved_rsp;
 
-            int is_exec = cexecve(bin1, argv1, (const char **)envps);
+            loading_binary = 1;
+            int is_exec = cexecve(bin1, argv1, (const char **)envps, 0);
+            memcpy(&btb_bprms[0], target_bprm, sizeof(struct usrld_binprm));
+            loading_binary = 2;
+            is_exec = cexecve(bin2, argv2, (const char **)envps, 0);
+            memcpy(&btb_bprms[1], target_bprm, sizeof(struct usrld_binprm));
 
+            start_thread(btb_bprms[0].mm->start_code, btb_bprms[0].elf_entry, btb_bprms[0].p);
             asm("advance1:");
             printf("alright! let's go to binary 2: %s\n", bin2);
-            loading_binary = 2;
 
-            is_exec = cexecve(bin2, argv2, (const char **)envps);
+            start_thread(btb_bprms[0].mm->start_code, btb_bprms[0].elf_entry, btb_bprms[0].p);
             asm("advance2:");
             printf("all done!\n");
 
             goto out;
         }
     }
-
+    loading_binary = 2;
     printf("perhaps.. %p\n", &atexit);
     // register_exit_func(&atexit, &rtl_advanced);
     // atexit(&rtl_advanced);
-    int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
+    int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp, 1);
 
     if (is_exec < 0)
         exit(-1);
@@ -83,9 +92,7 @@ out:
     return 0;
 }
 
-struct usrld_binprm *target_bprm;
-
-int cexecve(const char *filename, const char *argv[], const char *envp[])
+int cexecve(const char *filename, const char *argv[], const char *envp[], int start)
 {
     struct usrld_binprm *bprm;
     FILE *fp;
@@ -142,7 +149,10 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
     if (retval < 0)
         goto out_free;
 
-    start_thread(bprm->mm->start_code, bprm->elf_entry, bprm->p);
+    if (start)
+        start_thread(bprm->mm->start_code, bprm->elf_entry, bprm->p);
+
+    return retval;
 
 out_free:
     free(bprm);
