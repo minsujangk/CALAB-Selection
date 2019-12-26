@@ -133,9 +133,6 @@ int load_binary(struct usrld_binprm *bprm)
 
         vaddr = elf_ppnt->p_vaddr;
 
-        // if (loading_binary == 2)
-        //     vaddr += 0x300000;
-
         if (elf_ex->e_type == ET_EXEC || load_addr_set)
         {
             elf_flags |= elf_fixed;
@@ -174,15 +171,9 @@ int load_binary(struct usrld_binprm *bprm)
                 load_addr += load_bias;
                 // reloc_func_desc = load_bias;
             }
-
-            // if (loading_binary == 2)
-            //     load_addr += 0x300000;
         }
 
         k = elf_ppnt->p_vaddr;
-
-        // if (loading_binary == 2)
-        //     k += 0x300000;
 
         if (k < start_code)
             start_code = k;
@@ -191,9 +182,6 @@ int load_binary(struct usrld_binprm *bprm)
 
         k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
 
-        // if (loading_binary == 2)
-        //     k += 0x300000;
-
         if (k > elf_bss)
             elf_bss = k;
         if ((elf_ppnt->p_flags & PF_X) && end_code < k)
@@ -201,9 +189,6 @@ int load_binary(struct usrld_binprm *bprm)
         if (end_data < k)
             end_data = k;
         k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
-
-        // if (loading_binary == 2)
-        //     k += 0x300000;
 
         if (k > elf_brk)
         {
@@ -237,9 +222,6 @@ int load_binary(struct usrld_binprm *bprm)
     }
     bprm->elf_entry = elf_entry = elf_ex->e_entry;
 
-    // if (loading_binary == 2)
-    //     bprm->elf_entry += 0x300000;
-
     // free(elf_phdata);
 
     retval = create_elf_tables(bprm, elf_ex, load_addr, 0);
@@ -253,9 +235,6 @@ int load_binary(struct usrld_binprm *bprm)
     bprm->mm->start_stack = bprm->p;
 
     void *atexit_addr = get_symbol_address(elf_ex, fd, "__cxa_atexit");
-
-    // if (loading_binary == 2)
-    //     atexit_addr += 0x300000;
 
     register_exit_func(atexit_addr, &rtl_advanced);
 
@@ -528,10 +507,7 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
     NEW_AUX_ENT(AT_PHNUM, exec->e_phnum);
     NEW_AUX_ENT(AT_BASE, interp_load_addr);
     NEW_AUX_ENT(AT_FLAGS, get_aux_value(AT_FLAGS));
-    // if (loading_binary == 2)
-    //     NEW_AUX_ENT(AT_ENTRY, exec->e_entry + 0x300000);
-    // else
-        NEW_AUX_ENT(AT_ENTRY, exec->e_entry);
+    NEW_AUX_ENT(AT_ENTRY, exec->e_entry);
     NEW_AUX_ENT(AT_UID, get_aux_value(AT_UID));
     NEW_AUX_ENT(AT_EUID, get_aux_value(AT_EUID));
     NEW_AUX_ENT(AT_GID, get_aux_value(AT_GID));
@@ -728,7 +704,7 @@ void *load_elf_shdrs(const elfhdr *elf_ex, int fd)
     return shdrs;
 
 out_free:
-//     free(shdrs);
+    //     free(shdrs);
     return NULL;
 }
 
@@ -749,5 +725,5 @@ void *load_elf_area(int fd, unsigned long off, unsigned long size)
 
 out_free:
     // free(area);
-    return NULL;
+        return NULL;
 }
