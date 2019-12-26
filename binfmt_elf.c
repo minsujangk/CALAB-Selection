@@ -30,7 +30,7 @@
 static elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
                                 int fd);
 static int set_brk(unsigned long start, unsigned long end, int prot,
-                   struct usrld_mm_struct *mm);
+                   struct usrld_mm_struct *mm, struct list *map_list);
 static inline int make_prot(Elf64_Word p_flags);
 static unsigned long elf_map(unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
@@ -106,7 +106,7 @@ int load_binary(struct usrld_binprm *bprm)
             unsigned long nbyte;
 
             retval = set_brk(elf_bss + load_bias, elf_brk + load_bias,
-                             bss_prot, bprm->mm);
+                             bss_prot, bprm->mm, &bprm->map_list);
             if (retval)
                 goto out_free;
             nbyte = ELF_PAGEOFFSET(elf_bss);
@@ -205,7 +205,7 @@ int load_binary(struct usrld_binprm *bprm)
     start_data += load_bias;
     end_data += load_bias;
 
-    retval = set_brk(elf_bss, elf_brk, bss_prot, bprm->mm);
+    retval = set_brk(elf_bss, elf_brk, bss_prot, bprm->mm, &bprm->map_list);
     if (retval)
         goto out_free;
     unsigned long nbyte;
@@ -287,7 +287,7 @@ out:
 }
 
 static int set_brk(unsigned long start, unsigned long end, int prot,
-                   struct usrld_mm_struct *mm)
+                   struct usrld_mm_struct *mm, struct list *map_list)
 {
     start = ELF_PAGEALIGN(start);
     end = ELF_PAGEALIGN(end);
@@ -307,6 +307,13 @@ static int set_brk(unsigned long start, unsigned long end, int prot,
             printf("brkb %p-%p\n", (void *)addr, (void *)(addr + len));
         ret = mmap((void *)addr, len, prot,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+
+        // struct map_entry *mentry = (struct map_entry *)malloc(sizeof(struct map_entry));
+        struct map_entry *mentry = (struct map_entry *)load_mem_pool(sizeof(struct map_entry));
+        mentry->addr = addr;
+        mentry->len = len;
+        list_push_back(map_list, &mentry->elem);
+
         if (ret < 0)
             return -1;
     }
