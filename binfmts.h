@@ -50,7 +50,8 @@ struct map_entry
     size_t len;
 };
 
-int load_binary(struct usrld_binprm *bprm);
+void *preload_data(const char *filename, size_t *size);
+int load_binary(struct usrld_binprm *bprm, int no_stack);
 void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned long p);
 
 #ifdef DPAGER

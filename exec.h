@@ -54,6 +54,7 @@ void register_exit_func(void *atexit_addr, void (*func)(void));
 void rtl_advanced();
 
 void *load_mem_pool(int size);
+void finalize_bprm(struct usrld_binprm *bprm);
 
 #ifdef DPAGER
 void sig_segv_handler(int signom, siginfo_t *info, void *ucontext);

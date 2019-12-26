@@ -47,7 +47,7 @@ int main(int argc, char *argv[], char *envp[])
     sigaction(SIGSEGV, &act, NULL);
 #endif
 
-    mem_pool = malloc(40960);
+    mem_pool = malloc(40960 * 5);
 
     int i;
     for (i = 0; i < argc; i++)
@@ -72,6 +72,8 @@ int main(int argc, char *argv[], char *envp[])
 
             // container1 = malloc(sizeof(struct usrld_binprm));
             // container2 = malloc(sizeof(struct usrld_binprm));
+            // size_t bin2_datasize;
+            // void* bin2_data = preload_data(bin2, &bin2_datasize);
 
             int is_exec = cexecve(container1, bin1, argv1, (const char **)envps);
 
@@ -81,7 +83,9 @@ int main(int argc, char *argv[], char *envp[])
 
             is_exec = cexecve(container2, bin2, argv2, (const char **)envps);
             asm("advance2:");
-            printf("all done!\n");
+            printf("all done! nice!\n");
+
+            exit(0);
 
             goto out;
         }
@@ -272,7 +276,7 @@ int search_binary_handler(struct usrld_binprm *bprm)
 
     // ignore fmt search loop, just go to elf
     bprm->recursion_depth++;
-    retval = load_binary(bprm);
+    retval = load_binary(bprm, 0);
     bprm->recursion_depth--;
 
     if (retval < 0 && !bprm->mm)

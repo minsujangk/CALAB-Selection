@@ -45,7 +45,42 @@ void *load_elf_shdrs(const elfhdr *elf_ex, int fd);
 
 extern int loading_binary;
 
-int load_binary(struct usrld_binprm *bprm)
+void *preload_data(const char *filename, size_t *size)
+{
+    int retval;
+    struct usrld_binprm *bprm;
+    // bprm = malloc(sizeof(struct usrld_binprm));
+    bprm = load_mem_pool(sizeof(struct usrld_binprm));
+    // bprm = container;
+    if (!bprm)
+        return NULL;
+
+    list_init(&bprm->map_list);
+    bprm->filename = filename;
+    bprm->interp = filename;
+
+    retval = bprm_mm_init(bprm);
+    if (retval < 0)
+        return NULL;
+
+    retval = prepare_binprm(bprm);
+    if (retval < 0)
+        return NULL;
+
+    load_binary(bprm, 1);
+
+    size_t data_size = bprm->mm->end_data - bprm->mm->start_data;
+    *size = data_size;
+    // void *data_save = malloc(data_size);
+    void *data_save = mmap(0x800000, data_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    memcpy(data_save, bprm->mm->start_data, data_size);
+
+    finalize_bprm(bprm);
+
+    return data_save;
+}
+
+int load_binary(struct usrld_binprm *bprm, int no_stack)
 {
     unsigned long load_addr = 0, load_bias = 0;
     int load_addr_set = 0;
@@ -223,10 +258,12 @@ int load_binary(struct usrld_binprm *bprm)
     bprm->elf_entry = elf_entry = elf_ex->e_entry;
 
     // free(elf_phdata);
-
-    retval = create_elf_tables(bprm, elf_ex, load_addr, 0);
-    if (retval < 0)
-        goto out;
+    if (!no_stack)
+    {
+        retval = create_elf_tables(bprm, elf_ex, load_addr, 0);
+        if (retval < 0)
+            goto out;
+    }
 
     bprm->mm->end_code = end_code;
     bprm->mm->start_code = start_code;
