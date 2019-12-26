@@ -47,7 +47,7 @@ int main(int argc, char *argv[], char *envp[])
     sigaction(SIGSEGV, &act, NULL);
 #endif
 
-    mem_pool = malloc(40960);
+    mem_pool = malloc(409600);
 
     int i;
     for (i = 0; i < argc; i++)
@@ -79,10 +79,17 @@ int main(int argc, char *argv[], char *envp[])
             printf("alright! let's go to binary 2: %s\n", bin2);
             loading_binary = 2;
 
+            asm("movq %%rbp, %0"
+                : "=r"(saved_rbp));
+            asm("movq %%rsp, %0"
+                : "=r"(saved_rsp));
+            stack_amount = saved_rbp - saved_rsp;
+
             is_exec = cexecve(container2, bin2, argv2, (const char **)envps);
             asm("advance2:");
             printf("all done!\n");
 
+            _exit(0);
             goto out;
         }
     }
@@ -99,7 +106,7 @@ int main(int argc, char *argv[], char *envp[])
     printf("return success! welcome!!\n");
 
 out:
-    return 0;
+    _exit(0);
 }
 
 struct usrld_binprm *target_bprm;
