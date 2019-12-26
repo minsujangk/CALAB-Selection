@@ -10,6 +10,7 @@
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
+#include <setjmp.h>
 
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top);
 int loading_binary = 0;
@@ -25,6 +26,10 @@ unsigned long saved_rsp;
 
 void *container1;
 void *container2;
+
+jmp_buf jbuf;
+jmp_buf jbuf1;
+jmp_buf jbuf2;
 
 void *mem_pool;
 
@@ -71,10 +76,11 @@ int main(int argc, char *argv[], char *envp[])
             stack_amount = saved_rbp - saved_rsp;
 
             printf("executing binary 1: %s\n", bin1);
-            int is_exec = cexecve(container1, bin1, argv1, (const char **)envps);
+            int is_exec;
+            if (!setjmp(jbuf1))
+                is_exec = cexecve(container1, bin1, argv1, (const char **)envps);
 
-            asm("advance1:");
-            printf("alright! let's go to binary 2: %s\n", bin2);
+            printf("\nalright! let's go to binary 2: %s\n", bin2);
             loading_binary = 2;
 
             asm("movq %%rbp, %0"
@@ -83,9 +89,9 @@ int main(int argc, char *argv[], char *envp[])
                 : "=r"(saved_rsp));
             stack_amount = saved_rbp - saved_rsp;
 
-            is_exec = cexecve(container2, bin2, argv2, (const char **)envps);
-            asm("advance2:");
-            printf("all done!\n");
+            if (!setjmp(jbuf2))
+                is_exec = cexecve(container2, bin2, argv2, (const char **)envps);
+            printf("\nall done!\n");
 
             _exit(0);
             goto out;
@@ -95,7 +101,9 @@ int main(int argc, char *argv[], char *envp[])
     printf("perhaps.. %p\n", &atexit);
     // register_exit_func(&atexit, &rtl_advanced);
     // atexit(&rtl_advanced);
-    int is_exec = cexecve(malloc(sizeof(struct usrld_binprm)), argv[1], (const char **)&argv[2], (const char **)envp);
+    int is_exec;
+    if (!setjmp(jbuf))
+        is_exec = cexecve(malloc(sizeof(struct usrld_binprm)), argv[1], (const char **)&argv[2], (const char **)envp);
 
     if (is_exec < 0)
         exit(-1);
@@ -392,11 +400,11 @@ void rtl_advanced()
     memcpy(cur_rsp, saved_rsp, stack_amount);
 
     if (loading_binary == 1)
-        asm("jmp advance1");
+        longjmp(jbuf1, 1);
     else if (loading_binary == 2)
-        asm("jmp advance2");
+        longjmp(jbuf2, 1);
     else
-        asm("jmp advance");
+        longjmp(jbuf, 1);
 }
 
 void finalize_bprm(struct usrld_binprm *bprm)
