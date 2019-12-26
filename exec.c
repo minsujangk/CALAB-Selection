@@ -70,9 +70,7 @@ int main(int argc, char *argv[], char *envp[])
                 : "=r"(saved_rsp));
             stack_amount = saved_rbp - saved_rsp;
 
-            // container1 = malloc(sizeof(struct usrld_binprm));
-            // container2 = malloc(sizeof(struct usrld_binprm));
-
+            printf("executing binary 1: %s\n", bin1);
             int is_exec = cexecve(container1, bin1, argv1, (const char **)envps);
 
             asm("advance1:");
@@ -287,7 +285,7 @@ int search_binary_handler(struct usrld_binprm *bprm)
         //force sigsegv
         return retval;
     }
-    if (retval != -ENOEXEC )
+    if (retval != -ENOEXEC)
     {
         return retval;
     }
@@ -373,7 +371,8 @@ int setup_arg_pages(struct usrld_binprm *bprm,
 void register_exit_func(void *atexit_addr, void (*func)(void))
 {
 
-    printf("pushing func@%p with atexit@%p\n", func, atexit_addr);
+    if (IS_DEBUG)
+        printf("pushing func@%p with atexit@%p\n", func, atexit_addr);
     asm("movq %0, %%rdi" ::"r"(func));
     asm("movq $0, %rsi");
     asm("movq $0, %rdx");
@@ -382,7 +381,8 @@ void register_exit_func(void *atexit_addr, void (*func)(void))
 
 void rtl_advanced()
 {
-    printf("htshidsfs\n");
+    if (IS_DEBUG)
+        printf("rtl_advance started\n");
     finalize_bprm(target_bprm);
 
     unsigned long cur_rsp;
@@ -407,7 +407,8 @@ void finalize_bprm(struct usrld_binprm *bprm)
          e = list_next(e))
     {
         struct map_entry *mentry = list_entry(e, struct map_entry, elem);
-        printf("munmap %p, %d\n", mentry->addr, mentry->len);
+        if (IS_DEBUG)
+            printf("munmap %p, %d\n", mentry->addr, mentry->len);
         void *addr = mentry->addr;
         size_t len = mentry->len;
         // free(mentry);

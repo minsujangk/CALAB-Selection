@@ -645,7 +645,8 @@ void *get_symbol_address(const elfhdr *elf_ex, int fd, char *sym_name)
     for (i = 0; i < elf_ex->e_shnum; i++, elf_spnt++)
     {
         char *name_ptr = &shstrtab[elf_spnt->sh_name];
-        printf("symbol %d: %s\n", i, name_ptr);
+        if (IS_DEBUG)
+            printf("symbol %d: %s\n", i, name_ptr);
         if (strcmp(_symtab_name, name_ptr) == 0)
         {
             symtab_off = elf_spnt->sh_offset;
@@ -675,7 +676,8 @@ void *get_symbol_address(const elfhdr *elf_ex, int fd, char *sym_name)
 
         if (strcmp(sym_name, name_ptr) == 0)
         {
-            printf("%p: %s\n", elf_symnt->st_value, name_ptr);
+            if (IS_DEBUG)
+                printf("%p: %s\n", elf_symnt->st_value, name_ptr);
             return elf_symnt->st_value;
         }
     }

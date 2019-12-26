@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define IS_DEBUG 1
+#define IS_DEBUG 0
 
 // void *rtl_addr = NULL;
 struct exit_function
