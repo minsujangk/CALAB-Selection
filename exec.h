@@ -41,7 +41,7 @@ struct exit_function_list
 };
 struct exit_function_list *__exit_funcs;
 
-static int cexecve(void* container, const char *, const char *[], const char *[]);
+static int cexecve(const char *, const char *[], const char *[]);
 int bprm_mm_init(struct usrld_binprm *bprm);
 int prepare_arg_pages(struct usrld_binprm *bprm, const char *argv[], const char *envp[]);
 int prepare_binprm(struct usrld_binprm *bprm);

@@ -32,7 +32,7 @@ static elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
 static int set_brk(unsigned long start, unsigned long end, int prot,
                    struct usrld_mm_struct *mm);
 static inline int make_prot(Elf64_Word p_flags);
-static unsigned long elf_map(FILE *fp, unsigned long addr,
+static unsigned long elf_map(unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
                              unsigned long total_size, const char *filename,
                              struct list *map_list);
@@ -143,7 +143,7 @@ int load_binary(struct usrld_binprm *bprm)
         }
 
 #ifndef DPAGER
-        error = elf_map(bprm->fp, load_bias + vaddr, elf_ppnt,
+        error = elf_map(load_bias + vaddr, elf_ppnt,
                         elf_prot, elf_flags, total_size, bprm->filename,
                         &bprm->map_list);
 #endif
@@ -222,8 +222,6 @@ int load_binary(struct usrld_binprm *bprm)
     }
     bprm->elf_entry = elf_entry = elf_ex->e_entry;
 
-    // free(elf_phdata);
-
     retval = create_elf_tables(bprm, elf_ex, load_addr, 0);
     if (retval < 0)
         goto out;
@@ -240,13 +238,11 @@ int load_binary(struct usrld_binprm *bprm)
 
     close(fd);
 
-    // start_thread(start_code, elf_entry, bprm->p);
     retval = 0;
 out:
 out_ret:
     return retval;
 out_free:
-    // free(elf_phdata);
     goto out;
 
 out_err:
@@ -273,8 +269,6 @@ elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
     if (!elf_phdata)
         goto out;
 
-    // fseek(elf_fp, elf_ex->e_phoff, SEEK_SET);
-    // retval = fread(elf_phdata, size, 1, elf_fp);
     retval = pread(fd, elf_phdata, size, elf_ex->e_phoff);
     if (retval < 0)
     {
@@ -334,7 +328,7 @@ static inline int make_prot(Elf64_Word p_flags)
     return prot;
 }
 
-static unsigned long elf_map(FILE *fp, unsigned long addr,
+static unsigned long elf_map(unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
                              unsigned long total_size, const char *filename,
                              struct list *map_list)
@@ -694,11 +688,8 @@ void *load_elf_shdrs(const elfhdr *elf_ex, int fd)
 
     size = sizeof(Elf64_Shdr) * elf_ex->e_shnum;
 
-    // fseek(elf_fp, elf_ex->e_shoff, SEEK_SET);
-
     // shdrs = malloc(size);
     shdrs = load_mem_pool(size);
-    // size_t r = fread(shdrs, size, 1, elf_fp);
     size_t r = pread(fd, shdrs, size, elf_ex->e_shoff);
     if (r < 0)
         goto out_free;
@@ -706,7 +697,6 @@ void *load_elf_shdrs(const elfhdr *elf_ex, int fd)
     return shdrs;
 
 out_free:
-    //     free(shdrs);
     return NULL;
 }
 
@@ -714,11 +704,8 @@ void *load_elf_area(int fd, unsigned long off, unsigned long size)
 {
     void *area;
 
-    // fseek(elf_fp, off, SEEK_SET);
-
     // area = malloc(size);
     area = load_mem_pool(size);
-    // size_t r = fread(area, size, 1, elf_fp);
     size_t r = pread(fd, area, size, off);
     if (r < 0)
         goto out_free;
@@ -726,6 +713,5 @@ void *load_elf_area(int fd, unsigned long off, unsigned long size)
     return area;
 
 out_free:
-    // free(area);
         return NULL;
 }
