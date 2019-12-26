@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define IS_DEBUG 0
+#define IS_DEBUG 1
 
 // void *rtl_addr = NULL;
 struct exit_function
@@ -41,7 +41,7 @@ struct exit_function_list
 };
 struct exit_function_list *__exit_funcs;
 
-static int cexecve(const char *, const char *[], const char *[]);
+static int cexecve(void* container, const char *, const char *[], const char *[]);
 int bprm_mm_init(struct usrld_binprm *bprm);
 int prepare_arg_pages(struct usrld_binprm *bprm, const char *argv[], const char *envp[]);
 int prepare_binprm(struct usrld_binprm *bprm);
@@ -52,6 +52,8 @@ int setup_arg_pages(struct usrld_binprm *bprm, unsigned long stack_top,
 
 void register_exit_func(void *atexit_addr, void (*func)(void));
 void rtl_advanced();
+
+void *load_mem_pool(int size);
 
 #ifdef DPAGER
 void sig_segv_handler(int signom, siginfo_t *info, void *ucontext);

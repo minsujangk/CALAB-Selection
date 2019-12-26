@@ -34,11 +34,20 @@ struct usrld_binprm
 
     char buf[USRLD_BINPRM_BUF_SIZE]; // save first 128 byte of file
 
-    unsigned long elf_entry; 
+    unsigned long elf_entry;
+
+    struct list map_list; // for unmapping with two binaries
 
 #ifdef DPAGER
     struct list dpage_list;
 #endif
+};
+
+struct map_entry
+{
+    struct list_elem elem;
+    void *addr;
+    size_t len;
 };
 
 int load_binary(struct usrld_binprm *bprm);
@@ -54,7 +63,6 @@ struct usrld_dpage
     int elf_flags;
     unsigned long max_size;
 };
-
 
 static unsigned long elf_map_partial_page(FILE *fp, unsigned long base_addr,
                                           unsigned long base_file_off,

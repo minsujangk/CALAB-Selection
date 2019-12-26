@@ -28,19 +28,22 @@
 #define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
 static elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
-                                FILE *elf_fp);
+                                int fd);
 static int set_brk(unsigned long start, unsigned long end, int prot,
                    struct usrld_mm_struct *mm);
 static inline int make_prot(Elf64_Word p_flags);
 static unsigned long elf_map(FILE *fp, unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
-                             unsigned long total_size, const char *filename);
+                             unsigned long total_size, const char *filename,
+                             struct list *map_list);
 static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
                              unsigned long load_addr,
                              unsigned long interp_load_addr);
 unsigned long get_aux_value(unsigned long type);
-void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name);
-void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp);
+void *get_symbol_address(const elfhdr *elf_ex, int fd, char *sym_name);
+void *load_elf_shdrs(const elfhdr *elf_ex, int fd);
+
+extern int loading_binary;
 
 int load_binary(struct usrld_binprm *bprm)
 {
@@ -66,7 +69,8 @@ int load_binary(struct usrld_binprm *bprm)
     if (elf_ex->e_type != ET_EXEC && elf_ex->e_type != ET_DYN)
         goto out_err;
 
-    elf_phdata = load_elf_phdrs(elf_ex, bprm->fp);
+    int fd = open(bprm->filename, O_RDONLY);
+    elf_phdata = load_elf_phdrs(elf_ex, fd);
     if (!elf_phdata)
         goto out_err;
 
@@ -128,6 +132,10 @@ int load_binary(struct usrld_binprm *bprm)
         elf_flags = MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE;
 
         vaddr = elf_ppnt->p_vaddr;
+
+        // if (loading_binary == 2)
+        //     vaddr += 0x300000;
+
         if (elf_ex->e_type == ET_EXEC || load_addr_set)
         {
             elf_flags |= elf_fixed;
@@ -139,7 +147,8 @@ int load_binary(struct usrld_binprm *bprm)
 
 #ifndef DPAGER
         error = elf_map(bprm->fp, load_bias + vaddr, elf_ppnt,
-                        elf_prot, elf_flags, total_size, bprm->filename);
+                        elf_prot, elf_flags, total_size, bprm->filename,
+                        &bprm->map_list);
 #endif
 #ifdef DPAGER
         dpage = malloc(sizeof(struct usrld_dpage));
@@ -165,15 +174,25 @@ int load_binary(struct usrld_binprm *bprm)
                 load_addr += load_bias;
                 // reloc_func_desc = load_bias;
             }
+
+            // if (loading_binary == 2)
+            //     load_addr += 0x300000;
         }
 
         k = elf_ppnt->p_vaddr;
+
+        // if (loading_binary == 2)
+        //     k += 0x300000;
+
         if (k < start_code)
             start_code = k;
         if (start_data < k)
             start_data = k;
 
         k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
+
+        // if (loading_binary == 2)
+        //     k += 0x300000;
 
         if (k > elf_bss)
             elf_bss = k;
@@ -182,6 +201,10 @@ int load_binary(struct usrld_binprm *bprm)
         if (end_data < k)
             end_data = k;
         k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
+
+        // if (loading_binary == 2)
+        //     k += 0x300000;
+
         if (k > elf_brk)
         {
             bss_prot = elf_prot;
@@ -214,7 +237,10 @@ int load_binary(struct usrld_binprm *bprm)
     }
     bprm->elf_entry = elf_entry = elf_ex->e_entry;
 
-    free(elf_phdata);
+    // if (loading_binary == 2)
+    //     bprm->elf_entry += 0x300000;
+
+    // free(elf_phdata);
 
     retval = create_elf_tables(bprm, elf_ex, load_addr, 0);
     if (retval < 0)
@@ -226,8 +252,14 @@ int load_binary(struct usrld_binprm *bprm)
     bprm->mm->end_data = end_data;
     bprm->mm->start_stack = bprm->p;
 
-    void *atexit_addr = get_symbol_address(elf_ex, bprm->fp, "__cxa_atexit");
+    void *atexit_addr = get_symbol_address(elf_ex, fd, "__cxa_atexit");
+
+    // if (loading_binary == 2)
+    //     atexit_addr += 0x300000;
+
     register_exit_func(atexit_addr, &rtl_advanced);
+
+    close(fd);
 
     // start_thread(start_code, elf_entry, bprm->p);
     retval = 0;
@@ -235,7 +267,7 @@ out:
 out_ret:
     return retval;
 out_free:
-    free(elf_phdata);
+    // free(elf_phdata);
     goto out;
 
 out_err:
@@ -243,7 +275,7 @@ out_err:
 }
 
 elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
-                         FILE *elf_fp)
+                         int fd)
 {
     elf_phdr *elf_phdata = NULL;
     int retval, err = -1;
@@ -257,12 +289,14 @@ elf_phdr *load_elf_phdrs(const elfhdr *elf_ex,
     if (size < 1 || size > 65536 || size > ELF_MIN_ALIGN)
         goto out;
 
-    elf_phdata = malloc(size);
+    // elf_phdata = malloc(size);
+    elf_phdata = load_mem_pool(size);
     if (!elf_phdata)
         goto out;
 
-    fseek(elf_fp, elf_ex->e_phoff, SEEK_SET);
-    retval = fread(elf_phdata, size, 1, elf_fp);
+    // fseek(elf_fp, elf_ex->e_phoff, SEEK_SET);
+    // retval = fread(elf_phdata, size, 1, elf_fp);
+    retval = pread(fd, elf_phdata, size, elf_ex->e_phoff);
     if (retval < 0)
     {
         err = (retval < 0) ? retval : -EIO;
@@ -323,7 +357,8 @@ static inline int make_prot(Elf64_Word p_flags)
 
 static unsigned long elf_map(FILE *fp, unsigned long addr,
                              const elf_phdr *eppnt, int prot, int type,
-                             unsigned long total_size, const char *filename)
+                             unsigned long total_size, const char *filename,
+                             struct list *map_list)
 {
     unsigned long map_addr;
     unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
@@ -354,6 +389,15 @@ static unsigned long elf_map(FILE *fp, unsigned long addr,
     else
         map_addr = (unsigned long)mmap((void *)addr, size, prot, type, _fd, off);
     close(_fd);
+
+    // struct map_entry *mentry = (struct map_entry *)malloc(sizeof(struct map_entry));
+    struct map_entry *mentry = (struct map_entry *)load_mem_pool(sizeof(struct map_entry));
+    mentry->addr = map_addr;
+    if (total_size)
+        mentry->len = total_size;
+    else
+        mentry->len = size;
+    list_push_back(map_list, &mentry->elem);
 
     if (IS_DEBUG)
         printf("mapping %p-%p to %p, %p?, %d\n", (void *)off, (void *)(off + size), (void *)map_addr, (void *)addr, errno);
@@ -484,7 +528,10 @@ static int create_elf_tables(struct usrld_binprm *bprm, elfhdr *exec,
     NEW_AUX_ENT(AT_PHNUM, exec->e_phnum);
     NEW_AUX_ENT(AT_BASE, interp_load_addr);
     NEW_AUX_ENT(AT_FLAGS, get_aux_value(AT_FLAGS));
-    NEW_AUX_ENT(AT_ENTRY, exec->e_entry);
+    // if (loading_binary == 2)
+    //     NEW_AUX_ENT(AT_ENTRY, exec->e_entry + 0x300000);
+    // else
+        NEW_AUX_ENT(AT_ENTRY, exec->e_entry);
     NEW_AUX_ENT(AT_UID, get_aux_value(AT_UID));
     NEW_AUX_ENT(AT_EUID, get_aux_value(AT_EUID));
     NEW_AUX_ENT(AT_GID, get_aux_value(AT_GID));
@@ -591,9 +638,9 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
     asm("jmp *%0" ::"r"(jmp_target));
 }
 
-void *load_elf_area(FILE *elf_fp, unsigned long off, unsigned long size);
+void *load_elf_area(int fd, unsigned long off, unsigned long size);
 
-void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
+void *get_symbol_address(const elfhdr *elf_ex, int fd, char *sym_name)
 {
     void *shdrs;
     char *shstrtab;
@@ -609,7 +656,7 @@ void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
     char *strtab;
     unsigned long strtab_off, strtab_size;
 
-    shdrs = load_elf_shdrs(elf_ex, elf_fp);
+    shdrs = load_elf_shdrs(elf_ex, fd);
     if (!shdrs)
         return NULL;
 
@@ -617,12 +664,12 @@ void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
 
     shstrtab_off = elf_spnt[elf_ex->e_shstrndx].sh_offset;
     shstrtab_size = elf_spnt[elf_ex->e_shstrndx].sh_size;
-    shstrtab = (char *)load_elf_area(elf_fp, shstrtab_off, shstrtab_size);
+    shstrtab = (char *)load_elf_area(fd, shstrtab_off, shstrtab_size);
 
     for (i = 0; i < elf_ex->e_shnum; i++, elf_spnt++)
     {
         char *name_ptr = &shstrtab[elf_spnt->sh_name];
-        // printf("symbol %d: %s\n", i, name_ptr);
+        printf("symbol %d: %s\n", i, name_ptr);
         if (strcmp(_symtab_name, name_ptr) == 0)
         {
             symtab_off = elf_spnt->sh_offset;
@@ -641,8 +688,8 @@ void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
     if (!symtab_off || !symtab_size || !strtab_off || !strtab_size)
         return NULL;
 
-    symtab = load_elf_area(elf_fp, symtab_off, symtab_size);
-    strtab = (char *)load_elf_area(elf_fp, strtab_off, strtab_size);
+    symtab = load_elf_area(fd, symtab_off, symtab_size);
+    strtab = (char *)load_elf_area(fd, strtab_off, strtab_size);
 
     elf_symnt = symtab;
 
@@ -659,7 +706,7 @@ void *get_symbol_address(const elfhdr *elf_ex, FILE *elf_fp, char *sym_name)
     return NULL;
 }
 
-void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp)
+void *load_elf_shdrs(const elfhdr *elf_ex, int fd)
 {
     unsigned int size;
     void *shdrs;
@@ -669,34 +716,38 @@ void *load_elf_shdrs(const elfhdr *elf_ex, FILE *elf_fp)
 
     size = sizeof(Elf64_Shdr) * elf_ex->e_shnum;
 
-    fseek(elf_fp, elf_ex->e_shoff, SEEK_SET);
+    // fseek(elf_fp, elf_ex->e_shoff, SEEK_SET);
 
-    shdrs = malloc(size);
-    size_t r = fread(shdrs, size, 1, elf_fp);
+    // shdrs = malloc(size);
+    shdrs = load_mem_pool(size);
+    // size_t r = fread(shdrs, size, 1, elf_fp);
+    size_t r = pread(fd, shdrs, size, elf_ex->e_shoff);
     if (r < 0)
         goto out_free;
 
     return shdrs;
 
 out_free:
-    free(shdrs);
+//     free(shdrs);
     return NULL;
 }
 
-void *load_elf_area(FILE *elf_fp, unsigned long off, unsigned long size)
+void *load_elf_area(int fd, unsigned long off, unsigned long size)
 {
     void *area;
 
-    fseek(elf_fp, off, SEEK_SET);
+    // fseek(elf_fp, off, SEEK_SET);
 
-    area = malloc(size);
-    size_t r = fread(area, size, 1, elf_fp);
+    // area = malloc(size);
+    area = load_mem_pool(size);
+    // size_t r = fread(area, size, 1, elf_fp);
+    size_t r = pread(fd, area, size, off);
     if (r < 0)
         goto out_free;
 
     return area;
 
 out_free:
-    free(area);
+    // free(area);
     return NULL;
 }

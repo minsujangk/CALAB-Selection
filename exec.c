@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <string.h>
+#include <unistd.h>
 
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top);
 int loading_binary = 0;
@@ -22,6 +23,19 @@ unsigned long stack_amount;
 unsigned long saved_rbp;
 unsigned long saved_rsp;
 
+void *container1;
+void *container2;
+
+void *mem_pool;
+
+// #define LOAD_MEM_POOL(pool, type) ((type *)pool++)
+void *load_mem_pool(int size)
+{
+    void *old_mem = mem_pool;
+    mem_pool += size;
+    return old_mem;
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
     srand(time(NULL));
@@ -32,6 +46,8 @@ int main(int argc, char *argv[], char *envp[])
     act.sa_flags = SA_SIGINFO;
     sigaction(SIGSEGV, &act, NULL);
 #endif
+
+    mem_pool = malloc(40960);
 
     int i;
     for (i = 0; i < argc; i++)
@@ -54,13 +70,16 @@ int main(int argc, char *argv[], char *envp[])
                 : "=r"(saved_rsp));
             stack_amount = saved_rbp - saved_rsp;
 
-            int is_exec = cexecve(bin1, argv1, (const char **)envps);
+            // container1 = malloc(sizeof(struct usrld_binprm));
+            // container2 = malloc(sizeof(struct usrld_binprm));
+
+            int is_exec = cexecve(container1, bin1, argv1, (const char **)envps);
 
             asm("advance1:");
             printf("alright! let's go to binary 2: %s\n", bin2);
             loading_binary = 2;
 
-            is_exec = cexecve(bin2, argv2, (const char **)envps);
+            is_exec = cexecve(container2, bin2, argv2, (const char **)envps);
             asm("advance2:");
             printf("all done!\n");
 
@@ -71,7 +90,7 @@ int main(int argc, char *argv[], char *envp[])
     printf("perhaps.. %p\n", &atexit);
     // register_exit_func(&atexit, &rtl_advanced);
     // atexit(&rtl_advanced);
-    int is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
+    int is_exec = cexecve(malloc(sizeof(struct usrld_binprm)), argv[1], (const char **)&argv[2], (const char **)envp);
 
     if (is_exec < 0)
         exit(-1);
@@ -85,7 +104,7 @@ out:
 
 struct usrld_binprm *target_bprm;
 
-int cexecve(const char *filename, const char *argv[], const char *envp[])
+int cexecve(void *container, const char *filename, const char *argv[], const char *envp[])
 {
     struct usrld_binprm *bprm;
     FILE *fp;
@@ -95,17 +114,21 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
         return -1;
 
     retval = -ENOMEM;
-    bprm = malloc(sizeof(struct usrld_binprm));
+    // bprm = malloc(sizeof(struct usrld_binprm));
+    bprm = load_mem_pool(sizeof(struct usrld_binprm));
+    // bprm = container;
     if (!bprm)
         goto out_ret;
 #ifdef DPAGER
     list_init(&bprm->dpage_list);
 #endif
 
+    list_init(&bprm->map_list);
+
     retval = -EBADFD;
-    bprm->fp = fp = fopen(filename, "r");
-    if (!fp)
-        goto out_free;
+    // bprm->fp = fp = fopen(filename, "r");
+    // if (!fp)
+    //     goto out_free;
 
     bprm->filename = filename;
     bprm->interp = filename;
@@ -145,7 +168,7 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
     start_thread(bprm->mm->start_code, bprm->elf_entry, bprm->p);
 
 out_free:
-    free(bprm);
+    // free(bprm);
 
 out_ret:
     printf("exited here?\n");
@@ -155,13 +178,15 @@ out_ret:
 int bprm_mm_init(struct usrld_binprm *bprm)
 {
     struct usrld_mm_struct *mm = NULL;
-    bprm->mm = mm = malloc(sizeof(struct usrld_mm_struct));
+    // bprm->mm = mm = malloc(sizeof(struct usrld_mm_struct));
+    bprm->mm = mm = load_mem_pool(sizeof(struct usrld_mm_struct));
     if (!mm)
         return -ENOMEM;
 
     struct usrld_vma_struct *vma = NULL;
 
-    bprm->vma = vma = calloc(1, sizeof(struct usrld_vma_struct));
+    // bprm->vma = vma = calloc(1, sizeof(struct usrld_vma_struct));
+    bprm->vma = vma = load_mem_pool(sizeof(struct usrld_vma_struct));
     if (!vma)
         return -ENOMEM;
 
@@ -227,7 +252,13 @@ int prepare_binprm(struct usrld_binprm *bprm)
 {
     memset(bprm->buf, 0, USRLD_BINPRM_BUF_SIZE);
 
-    return fread(bprm->buf, USRLD_BINPRM_BUF_SIZE, 1, bprm->fp);
+    int fd = open(bprm->filename, O_RDONLY);
+    read(fd, bprm->buf, USRLD_BINPRM_BUF_SIZE);
+    close(fd);
+
+    return 1;
+
+    // return fread(bprm->buf, USRLD_BINPRM_BUF_SIZE, 1, bprm->fp);
 }
 
 int search_binary_handler(struct usrld_binprm *bprm)
@@ -249,7 +280,7 @@ int search_binary_handler(struct usrld_binprm *bprm)
         //force sigsegv
         return retval;
     }
-    if (retval != -ENOEXEC || !bprm->fp)
+    if (retval != -ENOEXEC )
     {
         return retval;
     }
@@ -344,19 +375,60 @@ void register_exit_func(void *atexit_addr, void (*func)(void))
 
 void rtl_advanced()
 {
+    printf("htshidsfs\n");
+    finalize_bprm(target_bprm);
+
     unsigned long cur_rsp;
     asm("subq %0, %%rsp" ::"r"(stack_amount));
     asm("mov %%rsp, %0"
         : "=r"(cur_rsp));
     memcpy(cur_rsp, saved_rsp, stack_amount);
 
-    // printf("htshidsfs\n");
     if (loading_binary == 1)
         asm("jmp advance1");
     else if (loading_binary == 2)
         asm("jmp advance2");
     else
         asm("jmp advance");
+}
+
+void finalize_bprm(struct usrld_binprm *bprm)
+{
+    struct list_elem *e;
+    for (e = list_begin(&bprm->map_list);
+         e != list_end(&bprm->map_list);
+         e = list_next(e))
+    {
+        struct map_entry *mentry = list_entry(e, struct map_entry, elem);
+        printf("munmap %p, %d\n", mentry->addr, mentry->len);
+        void *addr = mentry->addr;
+        size_t len = mentry->len;
+        // free(mentry);
+        int r = munmap(addr, len);
+        if (r < 0)
+            exit(1);
+        // free(mentry);
+    }
+
+    // // struct list_elem *e;
+    // for (e = list_begin(&bprm->map_list);
+    //      e != list_end(&bprm->map_list);
+    //      e = list_next(e))
+    // {
+    //     struct map_entry *mentry = list_entry(e, struct map_entry, elem);
+    //     printf("munmap %p, %d\n", mentry->addr, mentry->len);
+    //     void *addr = mentry->addr;
+    //     size_t len = mentry->len;
+    //     free(mentry);
+    //     int r = munmap(addr, len);
+    //     if (r < 0)
+    //         exit(1);
+    //     // free(mentry);
+    // }
+
+    // free(bprm->mm);
+    // free(bprm->vma);
+    // free(bprm);
 }
 
 #ifdef DPAGER
