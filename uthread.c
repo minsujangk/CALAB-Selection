@@ -17,6 +17,10 @@ void sched(struct list *t_list)
         if (bprmthd == cur_bprmthd && list_next(e) != list_end(t_list))
             continue;
 
+        // push current thread to back for fair scheduling
+        list_remove(e);
+        list_push_back(t_list, e);
+
         cur_bprmthd = bprmthd;
         printf("\nscheduling thread %s\n", bprmthd->bprm->filename);
         if (bprmthd->is_jbuf_set)
@@ -29,6 +33,8 @@ void sched(struct list *t_list)
             load_binary(bprmthd->bprm);
             start_thread(bprmthd->bprm->mm->start_code, bprmthd->bprm->elf_entry, bprmthd->bprm->p);
         }
+
+        // control never reach here
     }
 }
 
