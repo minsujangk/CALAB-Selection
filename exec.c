@@ -43,7 +43,7 @@ int main(int argc, char *argv[], char *envp[])
     sigaction(SIGSEGV, &act, NULL);
 #endif
 
-    mem_pool = malloc(409600);
+    mem_pool = malloc(40960000);
     list_init(&bprm_thread_list);
 
     int idx_arg_start;

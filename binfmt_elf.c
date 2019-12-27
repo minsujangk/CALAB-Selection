@@ -6,6 +6,7 @@
 #include "binfmts.h"
 #include "string.h"
 #include "exec.h"
+#include "uthread.h"
 
 #include <fcntl.h>
 #include <stdlib.h>
@@ -605,6 +606,7 @@ void start_thread(unsigned long start_code, unsigned long elf_entry, unsigned lo
     asm("movq $0, %r13");
     asm("movq $0, %r14");
     asm("movq $0, %r15");
+    asm("movq %0, %%r15"::"r"(yield));
 
     asm("mov %0, %%fs" ::"r"(v));
     asm("mov %0, %%gs" ::"r"(v));

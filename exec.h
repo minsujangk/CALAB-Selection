@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include "setjmp.h"
 
-#define IS_DEBUG 1
+#define IS_DEBUG 0
 
 // void *rtl_addr = NULL;
 struct exit_function
@@ -65,7 +65,7 @@ struct store_mapping
 struct store_info
 {
     int count;
-    struct store_mapping smap[3];
+    struct store_mapping smap[10];
 };
 
 struct list bprm_thread_list;

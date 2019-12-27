@@ -36,6 +36,7 @@ void yield()
 {
     if (!setjmp(cur_bprmthd->jbuf))
     {
+        cur_bprmthd->is_jbuf_set = 1;
         store_bprm(cur_bprmthd);
         sched(&bprm_thread_list); // if setjmp called by an user program, continue
     }
@@ -61,11 +62,7 @@ void store_bprm(struct bprm_thread *bprmthd)
 
         struct store_mapping *s_map = &s_info->smap[s_info->count++];
         s_map->loc_orig = addr;
-        if (!s_map->loc_save)
-        {
-            void *save_addr = load_mem_pool(len);
-            s_map->loc_save = save_addr;
-        }
+        s_map->loc_save = load_mem_pool(len);
         memcpy(s_map->loc_save, addr, len);
         s_map->len = len;
 
@@ -89,4 +86,5 @@ void restore_bprm(struct bprm_thread *bprmthd)
             _exit(-1);
         memcpy(mmap_addr, sinfo->smap[i].loc_save, sinfo->smap[i].len);
     }
+    sinfo->count = 0; // initialize to use it again
 }
