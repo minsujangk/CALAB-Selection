@@ -38,6 +38,8 @@ struct usrld_binprm
 
     struct list map_list; // for unmapping with two binaries
 
+    void *bprmthd;
+
 #ifdef DPAGER
     struct list dpage_list;
 #endif

@@ -11,15 +11,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <setjmp.h>
+#include "uthread.h"
 
 static unsigned long usrld_randomize_stack_top(unsigned long stack_top);
 int loading_binary = 0;
+int is_thread_mode = 0;
 
 jmp_buf jbuf;
 jmp_buf jbuf1;
 jmp_buf jbuf2;
 
 void *mem_pool;
+
+struct usrld_binprm *target_bprm;
 
 void *load_mem_pool(int size)
 {
@@ -40,8 +44,51 @@ int main(int argc, char *argv[], char *envp[])
 #endif
 
     mem_pool = malloc(409600);
+    list_init(&bprm_thread_list);
 
+    int idx_arg_start;
+    struct bprm_thread *bprmthd;
     int i;
+
+    if (argc > 3 && strcmp(argv[1], "-t") == 0)
+    {
+        printf("running user-threading mode\n");
+        is_thread_mode = 1;
+
+        idx_arg_start = 2;
+
+        for (i = 2; i < argc + 1; i++)
+        {
+            if (i == argc || strcmp(argv[i], "/") == 0)
+            {
+                argv[i] = NULL;
+
+                printf("registering binary: %s\n", argv[idx_arg_start]);
+                int is_exec = cexecve(argv[idx_arg_start], &argv[idx_arg_start + 1], envp, 0);
+                if (is_exec < 0)
+                    exit(1);
+
+                bprmthd = load_mem_pool(sizeof(struct bprm_thread));
+                bprmthd->bprm = target_bprm;
+                bprmthd->is_jbuf_set = 0; // initialization
+                target_bprm->bprmthd = bprmthd;
+
+                list_push_back(&bprm_thread_list, &bprmthd->elem);
+
+                if (i == argc)
+                    break;
+
+                idx_arg_start = i + 1;
+            }
+        }
+        if (!setjmp(jbuf))
+            sched(&bprm_thread_list);
+
+        printf("\n\\(^.^)/ terminating thread program...!\n");
+
+        _exit(0);
+    }
+
     for (i = 0; i < argc; i++)
     {
         if (strcmp(argv[i], "-2") == 0)
@@ -60,14 +107,14 @@ int main(int argc, char *argv[], char *envp[])
 
             int is_exec;
             if (!setjmp(jbuf1))
-                is_exec = cexecve(bin1, argv1, (const char **)envps);
+                is_exec = cexecve(bin1, argv1, (const char **)envps, 1);
 
             printf("\nalright! let's go to binary 2: %s\n", bin2);
 
             loading_binary = 2;
 
             if (!setjmp(jbuf2))
-                is_exec = cexecve(bin2, argv2, (const char **)envps);
+                is_exec = cexecve(bin2, argv2, (const char **)envps, 1);
 
             printf("\nall done!\n");
 
@@ -80,7 +127,7 @@ int main(int argc, char *argv[], char *envp[])
 
     int is_exec;
     if (!setjmp(jbuf))
-        is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp);
+        is_exec = cexecve(argv[1], (const char **)&argv[2], (const char **)envp, 1);
 
     if (is_exec < 0)
         exit(-1);
@@ -92,9 +139,7 @@ out:
     _exit(0);
 }
 
-struct usrld_binprm *target_bprm;
-
-int cexecve(const char *filename, const char *argv[], const char *envp[])
+int cexecve(const char *filename, const char *argv[], const char *envp[], int is_start)
 {
     struct usrld_binprm *bprm;
     FILE *fp;
@@ -147,18 +192,20 @@ int cexecve(const char *filename, const char *argv[], const char *envp[])
         goto out_free;
 
     target_bprm = bprm;
+    if (is_start)
+    {
+        retval = exec_binprm(bprm);
+        if (retval < 0)
+            goto out_free;
 
-    retval = exec_binprm(bprm);
-    if (retval < 0)
-        goto out_free;
-
-    start_thread(bprm->mm->start_code, bprm->elf_entry, bprm->p);
-
+        start_thread(bprm->mm->start_code, bprm->elf_entry, bprm->p);
+    }
 out_free:
     // free(bprm);
 
 out_ret:
-    printf("exited here?\n");
+    if (retval)
+        printf("there was some error\n");
     return retval;
 }
 
@@ -273,7 +320,7 @@ int search_binary_handler(struct usrld_binprm *bprm)
     return retval;
 }
 
-static int exec_binprm(struct usrld_binprm *bprm)
+int exec_binprm(struct usrld_binprm *bprm)
 {
     int ret;
 
@@ -359,18 +406,32 @@ void register_exit_func(void *atexit_addr, void (*func)(void))
     asm("call *%0" ::"r"(atexit_addr));
 }
 
+extern struct bprm_thread *cur_bprmthd;
+
 void rtl_advanced()
 {
     if (IS_DEBUG)
         printf("rtl_advance started\n");
-    finalize_bprm(target_bprm);
+    if (!is_thread_mode)
+    {
+        finalize_bprm(target_bprm);
 
-    if (loading_binary == 1)
-        longjmp(jbuf1, 1);
-    else if (loading_binary == 2)
-        longjmp(jbuf2, 1);
+        if (loading_binary == 1)
+            longjmp(jbuf1, 1);
+        else if (loading_binary == 2)
+            longjmp(jbuf2, 1);
+        else
+            longjmp(jbuf, 1);
+    }
     else
+    {
+        // we are using thread mode
+        finalize_bprm(cur_bprmthd->bprm);
+        list_remove(&cur_bprmthd->elem);
+        sched(&bprm_thread_list);
+        printf("finishing thread %s\n", cur_bprmthd->bprm->filename);
         longjmp(jbuf, 1);
+    }
 }
 
 void finalize_bprm(struct usrld_binprm *bprm)
