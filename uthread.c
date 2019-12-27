@@ -13,11 +13,12 @@ void sched(struct list *t_list)
     {
         struct bprm_thread *bprmthd = list_entry(e, struct bprm_thread, elem);
 
-        // just choose any other bprm
-        if (bprmthd == cur_bprmthd)
+        // just choose any other bprm, but if it is the only thread, reschedule it
+        if (bprmthd == cur_bprmthd && list_next(e) != list_end(t_list))
             continue;
 
         cur_bprmthd = bprmthd;
+        printf("\nscheduling thread %s\n", bprmthd->bprm->filename);
         if (bprmthd->is_jbuf_set)
         {
             restore_bprm(bprmthd);
